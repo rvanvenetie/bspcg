@@ -57,7 +57,7 @@
 
 In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method.
 
-To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices, \cite{uniflo}.
+To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices. \cite{uniflo} We chose to read these matrices in Matrix Market file format\footnote{The reason for this is pure laziness: it is possible to download these matrices in this format and the creators of the Matrix Market supplies a I/O C library.}. \cite{matmar}
 
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS routines.
