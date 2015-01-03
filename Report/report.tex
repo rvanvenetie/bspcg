@@ -42,7 +42,7 @@
 
 \begin{document}
 
-\title{Parallel Conjugate Gradients on Finite Element Matrices}
+\title{Parallel Conjugate Gradients on sparse Finite Element Matrices}
 \author{Raymond van Veneti\"e \and Jan Westerdiep}
 \maketitle
 
@@ -55,7 +55,13 @@
 ``The finite element method (FEM) is a numerical technique for finding approximate solutions to boundary value problems for partial differential equations. It uses subdivision of a whole problem domain into simpler parts, called finite elements, and variational methods from the calculus of variations to solve the problem by minimizing an associated error function. Analogous to the idea that connecting many tiny straight lines can approximate a larger circle, FEM encompasses methods for connecting many simple element equations over many small subdomains, named finite elements, to approximate a more complex equation over a larger domain." \cite{wiki:fem}
 \end{quote}
 
-In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method.
+We will be concerned with solving
+\[
+  Ax = b
+\]
+with known $A$ and $b$.
+
+In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method. Systems like this are sparse in the sense that a lot of the elements will be zero. This makes it possible to skip parts of the matrix-vector products one encounters.
 
 To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices. \cite{uniflo} We chose to read these matrices in Matrix Market file format\footnote{The reason for this is pure laziness: it is possible to download these matrices in this format and the creators of the Matrix Market supplies a I/O C library.}. \cite{matmar}
 
