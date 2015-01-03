@@ -3,7 +3,7 @@
 \usepackage{geometry}
 \usepackage{showlabels}
 \usepackage{multirow}
-\usepackage{cite}
+\usepackage{hyperref}
 \usepackage{algpseudocode}
 \usepackage{todonotes}
 \usepackage{algorithm}
@@ -56,6 +56,8 @@
 \end{quote}
 
 In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method.
+
+To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices, \cite{uniflo}.
 
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS routines.
@@ -129,7 +131,7 @@ A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a small
 \end{algorithmic}
 \end{algorithm}
 
-\bibliographystyle{ieeetr}
+\bibliographystyle{alpha}
 \bibliography{report}
 
 \end{document}
