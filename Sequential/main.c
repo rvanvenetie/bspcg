@@ -33,10 +33,10 @@ float cg( const int kmax, const float eps, //settings
   float rho_old;
   float normbsq;
 
-  cblas_scopy( n, x0, 1, x, 1); // x \to x_0
-  cblas_scopy( n, b, 1, r, 1); // r \to b
-  cblas_ssymv( CblasRowMajor, 122, n, -1.0, (float *)A, n, x, 1, 1.0, r, 1); // r \to r - Ax
-  rho = cblas_sdot( n, r, 1, r, 1); //rho \to <r, r>
+  cblas_scopy( n, x0, 1, x, 1); // x \gets x_0
+  cblas_scopy( n, b, 1, r, 1); // r \gets b
+  cblas_ssymv( CblasRowMajor, 122, n, -1.0, (float *)A, n, x, 1, 1.0, r, 1); // r \gets r - Ax
+  rho = cblas_sdot( n, r, 1, r, 1); //rho \gets <r, r>
   normbsq = cblas_sdot( n, b, 1, b, 1); //find <b, b>
 
 
@@ -49,20 +49,20 @@ float cg( const int kmax, const float eps, //settings
     float gamma;
 
     if( k == 0) {
-      cblas_scopy( n, r, 1, p, 1); //p \to r
+      cblas_scopy( n, r, 1, p, 1); //p \gets r
     } else {
       beta = rho/rho_old;
-      cblas_sscal( n, beta, p, 1); // p \to \beta p
-      cblas_saxpy( n, 1.0, r, 1, p, 1); // p \to r + p
+      cblas_sscal( n, beta, p, 1); // p \gets \beta p
+      cblas_saxpy( n, 1.0, r, 1, p, 1); // p \gets r + p
     }
 
-    cblas_ssymv( CblasRowMajor, 122, n, 1.0, (float *)A, n, p, 1, 0.0, w, 1); // w \to Ap
-    gamma = cblas_sdot( n, p, 1, w, 1); // \gamma \to <p, w>
+    cblas_ssymv( CblasRowMajor, 122, n, 1.0, (float *)A, n, p, 1, 0.0, w, 1); // w \gets Ap
+    gamma = cblas_sdot( n, p, 1, w, 1); // \gamma \gets <p, w>
     alpha = rho/gamma;
-    cblas_saxpy( n, alpha, p, 1, x, 1); // x \to x + \alpha p
-    cblas_saxpy( n, - alpha, w, 1, r, 1); // r \to r - \alpha w;
+    cblas_saxpy( n, alpha, p, 1, x, 1); // x \gets x + \alpha p
+    cblas_saxpy( n, - alpha, w, 1, r, 1); // r \gets r - \alpha w;
     rho_old = rho;
-    rho = cblas_sdot( n, r, 1, r, 1); // \rho \to <r, r>
+    rho = cblas_sdot( n, r, 1, r, 1); // \rho \gets <r, r>
 
     k = k+1;
   }
@@ -75,7 +75,7 @@ float cg( const int kmax, const float eps, //settings
   printf("\n");
 
   float b2[n];
-  cblas_ssymv( CblasRowMajor, 122, n, 1.0, (float *)A, n, x, 1, 0.0, b2, 1); //b2 \to Ax
+  cblas_ssymv( CblasRowMajor, 122, n, 1.0, (float *)A, n, x, 1, 0.0, b2, 1); //b2 \gets Ax
 
   printf("Ax = \n");
   for( int i = 0; i < n; i++) {

@@ -1,0 +1,135 @@
+\documentclass[11pt]{amsart}
+
+\usepackage{geometry}
+\usepackage{showlabels}
+\usepackage{multirow}
+\usepackage{cite}
+\usepackage{algpseudocode}
+\usepackage{todonotes}
+\usepackage{algorithm}
+\usepackage{enumerate}
+\usepackage{graphicx}
+%\setlength{\parindent}{0pt}
+\geometry{
+  includeheadfoot,
+  margin=2.54cm
+}
+
+\makeatletter
+\def\imod#1{\allowbreak\mkern10mu({\operator@font mod}\,\,#1)}
+\makeatother
+
+\newtheorem*{problem}{Problem}
+\theoremstyle{definition}
+\newtheorem*{answer}{Answer}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\D}{\mathcal{D}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\T}{\mathcal{T}}
+\newcommand{\C}{\mathcal{C}}
+\newcommand{\A}{\mathbb{A}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\F}{\mathbb{F}}
+\renewcommand{\P}{\mathcal{P}}
+\newcommand{\f}{\varphi}
+\newcommand{\e}{\epsilon}
+\renewcommand{\d}{\delta}
+
+\DeclareMathOperator{\vol}{vol}
+
+
+\begin{document}
+
+\title{Parallel Conjugate Gradients on Finite Element Matrices}
+\author{Raymond van Veneti\"e \and Jan Westerdiep}
+\maketitle
+
+\section{Introduction}
+\begin{quote}
+``The conjugate gradient method (CG) is an algorithm for the numerical solutions of particular systems of linear equations, namely those whose matrix is symmetric and positive definite. The conjugate gradient method is often implemented as an iterative algorithm, applicable to sparse systems that are too large to be handled by a direct implementation or other direct methods such as the Cholesky decomposition. Large sparse systems often arise when numerically solving partial differential equations or optimization problems." \cite{wiki:cg}
+\end{quote}
+
+\begin{quote}
+``The finite element method (FEM) is a numerical technique for finding approximate solutions to boundary value problems for partial differential equations. It uses subdivision of a whole problem domain into simpler parts, called finite elements, and variational methods from the calculus of variations to solve the problem by minimizing an associated error function. Analogous to the idea that connecting many tiny straight lines can approximate a larger circle, FEM encompasses methods for connecting many simple element equations over many small subdomains, named finite elements, to approximate a more complex equation over a larger domain." \cite{wiki:fem}
+\end{quote}
+
+In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method.
+
+\section{CG}
+In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS routines.
+
+The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Slide 23]{sleij}:
+\[
+  \frac{\|x - x_k\|_A}{\|x - x_0\|_A} \leq 2 \left( \frac{ \sqrt{\kappa_2(A)}-1}{\sqrt{\kappa_2(A)}+1}\right)^k \leq 2 \exp \left( -\frac{2k}{\sqrt{\kappa_2(A)}}\right) 
+\]
+where $\kappa_2(A)$ is the $2$-condition number of $A$, which for symmetric positive definite matrices equates
+\[
+  \kappa_2(A) = \frac{\lambda_{max}}{\lambda_{min}}.
+\]
+It is therefore of interest to create a condition number that is as low as possible.
+
+\subsection{Preconditioned CG}
+A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a smaller condition number than $A$. As the theoretical convergence rate is highly dependent on the condition number, we can improve this using such a preconditioner. Instead of solving $Ax = b$, we will solve $P^{-1}Ax = P^{-1}b$. Blablabla
+
+\section{FEM matrices}
+\section{Parallellizing CG}
+
+\section{Using sparsity of matrices in parallel CG}
+
+\section{hoe heette het ook alweer als je na een kleine verandering in je matrix opnieuw ging optimizen}
+
+\section{Future work}
+\subsection{Adaptive FEM}
+
+\begin{algorithm}
+\caption{Sequential CG}
+\label{alg:seqcg}
+\begin{algorithmic}[1]
+  \Function{cg}{$k_{max}$, $\e$, $n$, $A[n][n]$, $b[n]$, $x_0[n]$, $x[n]$}
+    \State int $k := 0$;
+    \State float $r[n]$;
+    \State float $\rho$;
+    \State float $\rho_{old}$;
+    \State float $nbsq$;
+    \State
+    \State $x \gets x_0$;
+    \State $r \gets b$;
+    \State $r \gets r - Ax$;
+    \State $\rho \gets \langle r, r \rangle$;
+    \State $nbsq \gets \langle b, b \rangle$;
+    \State
+    \While{$\rho > \e^2 \cdot nbsq \wedge k < k_{max}$}
+      \State float $p[n]$;
+      \State float $w[n]$;
+      \State float $\alpha$;
+      \State float $\beta$;
+      \State float $\gamma$;
+      \State
+      \If{$k == 0$}
+        \State $p \gets r$;
+      \Else
+        \State $\beta \gets \rho/\rho_{old}$;
+        \State $p \gets \beta p$;
+        \State $p \gets r + p$;
+      \EndIf
+      \State
+      \State $w \gets Ap$;
+      \State $\gamma \gets \langle p, w\rangle$;
+      \State $\alpha \gets \rho/\gamma$;
+      \State $x \gets x + \alpha p$;
+      \State $r \gets r - \alpha w$;
+      \State $\rho_{old} \gets \rho$;
+      \State $\rho \gets \langle r, r \rangle$;
+      \State
+      \State $k \gets k+1$;
+    \EndWhile
+  \EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\bibliographystyle{ieeetr}
+\bibliography{report}
+
+\end{document}
