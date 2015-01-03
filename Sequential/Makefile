@@ -1,4 +1,4 @@
-CFLAGS = -Wall -g3 -I.
+CFLAGS = -Wall -g3 -I. -std=c99
 LIBS = -framework Accelerate
 OBJ = main.o
 CC = gcc
