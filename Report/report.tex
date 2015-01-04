@@ -42,7 +42,7 @@
 
 \begin{document}
 
-\title{Parallel Conjugate Gradients on sparse Finite Element Matrices}
+\title{Parallel Conjugate Gradients on sparse stiffness matrices}
 \author{Raymond van Veneti\"e \and Jan Westerdiep}
 \maketitle
 
@@ -65,9 +65,137 @@ In this report, we will look at a parallel implementation of the conjuate gradie
 
 To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices. \cite{uniflo} We chose to read these matrices in Matrix Market file format\footnote{The reason for this is pure laziness: it is possible to download these matrices in this format and the creators of the Matrix Market supplies a I/O C library.}. \cite{matmar}
 
+\section{Finite Element Method}
+Given the boundary value problem, 
+\begin{equation}
+  \begin{cases} - \Delta u = 1 & \Omega \\ u = 0 & \partial \Omega \end{cases}
+  \label{eqn:problem}
+\end{equation}
+and some partition into simplices, FEM will find the continuous solution, piecewise polynomial (wrt.~this partition) with smallest $H^1$-norm error. ofzo
+
+If we apply this to our 2D case, we have a polygonal domain $\Omega$ and a set of elements $\{\triangle_k\}_{k=1}^K$, $\triangle_k \subset \Omega$ with $\cup_{k=1}^K \triangle_k = \Omega$ and $\triangle_k \cap \triangle_j$ for $k \not= j$ is either empty, a common vertex or a common edge (hoe heet dit ook alweer? regularity condition ofzo?).
+
+We create one reference element $\hat \triangle$ spanned by vertices $(0,0)$, $(1, 0)$, $(0, 1)$ on which we have a polynomial basis of some degree -- say $\bar p$. The amount of basis functions in this basis must be $p = (\bar p + 2)(\bar p + 1)/2$. So we have a basis $\hat \Phi = \{ \hat \phi_i \}_{i=1}^p$.
+
+We are now able to create an affine function $T_k: \triangle_k \to \hat \triangle$ from some element in the partition to this reference element. Hence we automatically have a polynomial basis on $\triangle_k$, namely $\Phi^k := \{ \phi^k_i \}_{i=1}^p$ with $\phi^k_i := \hat \phi_i \circ T_k$.
+
+We can in fact create a global basis $\mathbf \Phi$ by gluing together the correct functions (TODO dit is lastig). Each basis function of this basis is a piecewise polynoimal subject to the partition, and is necessarily zero on $\partial \Omega$.
+
+\subsection{Weak formulation}
+If $u$ solves \eqref{eqn:problem}, then
+\[
+  -\Delta u = 1 \implies - v \Delta u = v \forall v \in H^1_0(\Omega) \implies \int_\Omega - v \Delta u = \int_\Delta v
+\]
+and using Green's first identity
+\[
+  \int_\Omega - v \Delta u = \int_\Omega \nabla v \cdot \nabla u - \oint_{\partial \Omega} v( \nabla u \cdot n)
+\]
+where the last term must equal zero as $u = 0$ on $\partial \Omega$. We therefore end up at the weak formulation:
+\[
+  u\text{ solves } \eqref{eqn:problem} \implies \int_{\Omega} \nabla v \cdot \nabla u = \int_\Omega v \forall v \in H^1_0(\Omega).
+\]
+
+The idea is that we will find functions $u_{FE}$ that exhibit this property and ``hope'' (TODO vinden dat dit klopt) that $u_{FE}$ ``almost'' solves \eqref{eqn:problem}.
+
+\section{Linear polynomials on the triangle}
+If we take $\bar p=1$, we are discussing linear polynomials on the triangle. One way to create a basis for this space is to use the \emph{nodal basis}, where we create basis functions that are equal $1$ on one vertex of the triangle and $0$ on the others. The nodal basis on the reference element becomes
+\[
+  \hat \phi_1 = 1-y-x, \quad \hat \phi_2 = y, \quad \hat \phi_3 = x.
+\]
+
+If we look at this globally, we have a \emph{nodal basis} for the whole partition, namely two-dimensional ``hat'' functions $\phi_i$ which are zero on every vertex but a single one -- say $v_i$. The vertices on the boundary of the domain cannot have basis functions associated with them, as the resulting solution $u_{FE} = c^\top \mathbf \Phi = \sum c_i \phi_i$ must be zero on this boundary.
+
+If we fill in $u_{FE}$ in this weak formulation and set $v = \phi_j$, we get
+\[
+  \int_\Omega \nabla \phi_j \cdot \nabla \left (\sum c_i \phi_i\right) = \int_\Omega \phi_j \implies \sum c_i \int_\Omega \nabla \phi_j \cdot \nabla \phi_i = \int_\Omega \phi_j \forall j
+\]
+or
+\[
+  Ac = b, \quad a_{ij} = \int_\Omega \nabla \phi_j \cdot \nabla \phi_i, \quad b_i = \int_\Omega \phi_j.
+\]
+In other words, finding this best solution $u_{FE} = c^\top \mathbf \Phi$ amounts to solving a linear system where the matrix $A$ is real and symmetric (as inner products are commutative). This is where the Conjugate gradient method comes into play.
+
+Hier moet nog aan toegevoegd worden:
+\begin{itemize}
+  \item stiffness matrix is eigenlijk som van kleinere stiffness matrices
+  \item deze grote stiffness matrix kan je maken/opslaan door op de goede plek shit in te voegen.
+\end{itemize}
+
+
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS routines.
 
+\begin{algorithm}
+\caption{Sequential CG}
+\label{alg:seqcg}
+\begin{algorithmic}[1]
+  \Require{$k_{max} \in \N$, $\e \in \R$, $n \in \N$, $A$ symmetric $n \times n$, $b \in \R^n$, $x_0 \in \R^n$}
+  \Ensure{$x \in \R^n$ with $Ax \approx b$}
+  \State int $k := 0$;
+  \State float $r[n]$;
+  \State float $\rho$;
+  \State float $\rho_{old}$;
+  \State float $nbsq$;
+  \State
+  \State $x \gets x_0$;
+  \State $r \gets b$;
+  \State $r \gets r - Ax$;
+  \State $\rho \gets \langle r, r \rangle$;
+  \State $nbsq \gets \langle b, b \rangle$;
+  \State
+  \While{$\rho > \e^2 \cdot nbsq \wedge k < k_{max}$}
+    \State float $p[n]$;
+    \State float $w[n]$;
+    \State float $\alpha$;
+    \State float $\beta$;
+    \State float $\gamma$;
+    \State
+    \If{$k == 0$}
+      \State $p \gets r$;
+    \Else
+      \State $\beta \gets \rho/\rho_{old}$;
+      \State $p \gets \beta p$;
+      \State $p \gets r + p$;
+    \EndIf
+    \State
+    \State $w \gets Ap$;
+    \State $\gamma \gets \langle p, w\rangle$;
+    \State $\alpha \gets \rho/\gamma$;
+    \State $x \gets x + \alpha p$;
+    \State $r \gets r - \alpha w$;
+    \State $\rho_{old} \gets \rho$;
+    \State $\rho \gets \langle r, r \rangle$;
+    \State
+    \State $k \gets k+1$;
+  \EndWhile
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Sparse CG}
+As FEM matrices are sparse in nature, we will adapt Algorithm~\ref{alg:seqcg} to a version that supports sparse matrices. For simplicity, we will assume the right-hand side to be dense. This allows us to effectively only change I/O and the function responsible for matrix-vector multiplication.
+
+Our storage format uses the so-called coordinate scheme; we store tuples $(i, j, a_{ij})$ with $i$ the row number, $j$ the column number and $a_{ij}$ the matrix value at this position. The Matrix Market file format adds some headers, e.g. to denounce symmetry so that one only has to store the lower triangular part. We denote by $nz(A)$ the amount of nonzero elements in this lower triangular part. If we store the list of tuples in three lists of length $nz(A)$, namely $I$, $J$ and $v$, we can compute a sequential sparse matrix-vector multiplication using Algorithm~\ref{alg:sparsemv} (from \cite[Alg.~4.3]{biss04}).
+
+\begin{algorithm}
+\caption{Sequential sparse matrix vector multiplication: find $y \gets \alpha A x + \beta y$ for symmetric $A$}
+\label{alg:sparsemv}
+\begin{algorithmic}[1]
+  \Require{$\alpha \in \R$, $\beta \in \R$, $n \in \N$, amount of nonzeroes $nz(A)$, $I \in \N^{nz(A)}$, $J \in \N^{nz(Z)}$, $v \in \R^{nz(A)}$, $x \in \R^n$, $y \in \R^n$}
+  \Ensure{$y \gets \alpha Ax + \beta y$}
+  \For{$i = 0$ until $n$}
+    \State $y[i] = \beta y[i]$;
+  \EndFor
+
+  \For{$j=0$ until $nz(A)$}
+    \State $y[I[j]] = \alpha v[j] x[J[j]] + y[I[j]]$;
+    \If{$I[j] \not= J[j]$} \Comment{$A$ is symmetric}
+      \State $y[J[j]] = \alpha v[j] x[I[j]] + y[J[j]]$;
+    \EndIf
+  \EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Preconditioned CG}
 The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Slide 23]{sleij}:
 \[
   \frac{\|x - x_k\|_A}{\|x - x_0\|_A} \leq 2 \left( \frac{ \sqrt{\kappa_2(A)}-1}{\sqrt{\kappa_2(A)}+1}\right)^k \leq 2 \exp \left( -\frac{2k}{\sqrt{\kappa_2(A)}}\right) 
@@ -78,10 +206,8 @@ where $\kappa_2(A)$ is the $2$-condition number of $A$, which for symmetric posi
 \]
 It is therefore of interest to create a condition number that is as low as possible.
 
-\subsection{Preconditioned CG}
 A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a smaller condition number than $A$. As the theoretical convergence rate is highly dependent on the condition number, we can improve this using such a preconditioner. Instead of solving $Ax = b$, we will solve $P^{-1}Ax = P^{-1}b$. Blablabla
 
-\section{FEM matrices}
 \section{Parallellizing CG}
 
 \section{Using sparsity of matrices in parallel CG}
@@ -91,51 +217,6 @@ A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a small
 \section{Future work}
 \subsection{Adaptive FEM}
 
-\begin{algorithm}
-\caption{Sequential CG}
-\label{alg:seqcg}
-\begin{algorithmic}[1]
-  \Function{cg}{$k_{max}$, $\e$, $n$, $A[n][n]$, $b[n]$, $x_0[n]$, $x[n]$}
-    \State int $k := 0$;
-    \State float $r[n]$;
-    \State float $\rho$;
-    \State float $\rho_{old}$;
-    \State float $nbsq$;
-    \State
-    \State $x \gets x_0$;
-    \State $r \gets b$;
-    \State $r \gets r - Ax$;
-    \State $\rho \gets \langle r, r \rangle$;
-    \State $nbsq \gets \langle b, b \rangle$;
-    \State
-    \While{$\rho > \e^2 \cdot nbsq \wedge k < k_{max}$}
-      \State float $p[n]$;
-      \State float $w[n]$;
-      \State float $\alpha$;
-      \State float $\beta$;
-      \State float $\gamma$;
-      \State
-      \If{$k == 0$}
-        \State $p \gets r$;
-      \Else
-        \State $\beta \gets \rho/\rho_{old}$;
-        \State $p \gets \beta p$;
-        \State $p \gets r + p$;
-      \EndIf
-      \State
-      \State $w \gets Ap$;
-      \State $\gamma \gets \langle p, w\rangle$;
-      \State $\alpha \gets \rho/\gamma$;
-      \State $x \gets x + \alpha p$;
-      \State $r \gets r - \alpha w$;
-      \State $\rho_{old} \gets \rho$;
-      \State $\rho \gets \langle r, r \rangle$;
-      \State
-      \State $k \gets k+1$;
-    \EndWhile
-  \EndFunction
-\end{algorithmic}
-\end{algorithm}
 
 \bibliographystyle{alpha}
 \bibliography{report}
