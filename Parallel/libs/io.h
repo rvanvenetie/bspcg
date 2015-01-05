@@ -1,6 +1,6 @@
 typedef struct {
   int n, nz;
-  int *I;
+  int *inc;
   int nrows, ncols, *rowindex, *colindex;
   double *val;
 } distributed_matrix;
