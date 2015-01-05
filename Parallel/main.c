@@ -61,9 +61,9 @@ double bspip_dist(int p, int s,  //Processor information
 int P;
 #define kmax 15
 #define eps 0.01
-#define mat_file "../../mtxMatrices/bodyy5.mtx-P%d"
-#define dist_file "../../mtxMatrices/bodyy5.mtx-u%d"
-#define b_file   "../../mtxMatrices/bodyy5.mtx-b"
+#define mat_file "../mtxMatrices/bodyy5.mtx-P%d"
+#define dist_file "../mtxMatrices/bodyy5.mtx-u%d"
+#define b_file   "../mtxMatrices/bodyy5.mtx-b"
 
 #define DEBUG(...) { if (s == 0) printf(__VA_ARGS__); }
 
