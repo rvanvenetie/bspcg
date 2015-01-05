@@ -511,8 +511,10 @@ the local index i, 0 <= i < nv.
   *pvindex= vindex;
   if( get_vals) *pvval = vval;
 
-  fclose( disfp);
-  if( get_vals) fclose( valfp);
+  if( s == 0) {
+    fclose( disfp);
+    if( get_vals) fclose( valfp);
+  }
 
 } /* end bspinputvec */
 
