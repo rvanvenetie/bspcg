@@ -11,5 +11,4 @@ typedef struct {
 } vector_distribution;
 
 distributed_matrix load_symm_distributed_matrix_from_file( const char *filename, const int p, const int s);
-vector_distribution load_vector_distribution_from_file( const char *disfile, const int p, const int s);
-int load_vector_values_from_file( const char *valfile, vector_distribution dis, const int p, const int s, double *vals);
+vector_distribution load_vector_distribution_from_file( const char *disfile, const char *valfile, const int p, const int s, double **pval);
