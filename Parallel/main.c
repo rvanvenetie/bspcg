@@ -3,7 +3,6 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
-#include <cblas.h>
 #include "io.h"
 #include "bspmv.h"
 #include "bspedupack.h"
