@@ -10,7 +10,7 @@
 
 #define UPPER 121
 #define LOWER 122
-#define PRINTMATS 0
+#define PRINTMATS 1
 
 void zero( int n, double *w) {
   for( int i = 0; i < n; i++) {
@@ -18,10 +18,40 @@ void zero( int n, double *w) {
   }
 }
 
-int print_vec( const char *name, const int n, const double *x) {
-  printf( "Printing %s (len %i):\n", name, n);
+//p \gets r
+void copy_vec( const int n, const double *r, double *p) {
   for( int i = 0; i < n; i++) {
-    printf("%f\n", x[i]);
+    p[i] = r[i];
+  }
+}
+
+//p \gets \beta p
+void scale_vec( const int n, const double beta, double *p) {
+  for( int i = 0; i < n; i++) {
+    p[i] *= beta;
+  }
+}
+
+//r \gets r + \alpha w
+void axpy_vec( const int n, const double alpha, const double *w, double *r) {
+  for( int i = 0; i < n; i++) {
+    r[i] += alpha * w[i];
+  }
+}
+
+//return <r, p>
+double dot_vec( const int n, const double *r, const double *p) {
+  double a = 0;
+  for( int i = 0; i < n; i++) {
+    a += r[i]*p[i];
+  }
+  return a;
+}
+
+int print_vec( const char *name, const int n, const double *x) {
+  //printf( "Printing %s (len %i):\n", name, n);
+  for( int i = 0; i < n; i++) {
+    //printf("%f\n", x[i]);
   }
   printf("\n");
 
@@ -61,33 +91,38 @@ double sparse_cg( const int kmax, const double eps, //settings
   }
 
   int k = 0;
-  double r[n], rho, rho_old, normbsq;
+  double r[n], rho, rho_old = 0, normbsq;
 
-  cblas_dcopy( n, x0, 1, x, 1); // x \gets x_0
-  cblas_dcopy( n, b, 1, r, 1); // r \gets b
+  copy_vec( n, x0, x); // x \gets x_0
+  copy_vec( n, b, r); // r \gets b
   sparse_matvec( -1.0, 1.0, n, nz, I, J, val, x, r); // r \gets r - Ax
-  rho = cblas_ddot( n, r, 1, r, 1); //rho \gets <r, r>
+  rho = dot_vec( n, r, r); //rho \gets <r, r>
   printf("rho = %g\n", rho);
-  normbsq = cblas_ddot( n, b, 1, b, 1); //find <b, b>
+  normbsq = dot_vec( n, b, b); //find <b, b>
 
   while( rho > eps*eps*normbsq && k < kmax) {
     double p[n], w[n], alpha, beta, gamma;
 
     if( k == 0) {
-      cblas_dcopy( n, r, 1, p, 1); //p \gets r
+      copy_vec( n, r, p); //p \gets r
     } else {
       beta = rho/rho_old;
-      cblas_dscal( n, beta, p, 1); // p \gets \beta p
-      cblas_daxpy( n, 1.0, r, 1, p, 1); // p \gets r + p
+      scale_vec( n, beta, p); // p \gets \beta p
+      axpy_vec( n, 1.0, r, p); // p \gets r + p
     }
 
+    print_vec( "u", n, p);
+
     sparse_matvec( 1.0, 0.0, n, nz, I, J, val, p, w);
-    gamma = cblas_ddot( n, p, 1, w, 1); // \gamma \gets <p, w>
+    print_vec( "w", n, w);
+    gamma = dot_vec( n, p, w); // \gamma \gets <p, w>
     alpha = rho/gamma;
-    cblas_daxpy( n, alpha, p, 1, x, 1); // x \gets x + \alpha p
-    cblas_daxpy( n, - alpha, w, 1, r, 1); // r \gets r - \alpha w;
+    axpy_vec( n, alpha, p, x); // x \gets x + \alpha p
+    print_vec( "x", n, x);
+    axpy_vec( n, - alpha, w, r); // r \gets r - \alpha w;
+    print_vec( "r", n, r);
     rho_old = rho;
-    rho = cblas_ddot( n, r, 1, r, 1); // \rho \gets <r, r>
+    rho = dot_vec( n, r, r); // \rho \gets <r, r>
     printf("rho = %g\n", rho);
 
     k = k+1;
@@ -121,33 +156,38 @@ double dense_cg( const int kmax, const double eps, //settings
   int k = 0;
   double r[n], rho, rho_old, normbsq;
 
-  cblas_dcopy( n, x0, 1, x, 1); // x \gets x_0
-  cblas_dcopy( n, b, 1, r, 1); // r \gets b
+  copy_vec( n, x0, x); // x \gets x_0
+  copy_vec( n, b, r); // r \gets b
   cblas_dsymv( CblasRowMajor, LOWER, n, -1.0, A, n, x, 1, 1.0, r, 1); // r \gets r - Ax
-  rho = cblas_ddot( n, r, 1, r, 1); //rho \gets <r, r>
+  rho = dot_vec( n, r, r); //rho \gets <r, r>
   printf("rho = %g\n", rho);
-  normbsq = cblas_ddot( n, b, 1, b, 1); //find <b, b>
+  normbsq = dot_vec( n, b, b); //find <b, b>
 
   while( rho > eps*eps*normbsq && k < kmax) {
     double p[n], w[n], alpha, beta, gamma;
 
     if( k == 0) {
-      cblas_dcopy( n, r, 1, p, 1); //p \gets r
+      copy_vec( n, r, p); //p \gets r
     } else {
       beta = rho/rho_old;
-      cblas_dscal( n, beta, p, 1); // p \gets \beta p
-      cblas_daxpy( n, 1.0, r, 1, p, 1); // p \gets r + p
+      scale_vec( n, beta, p); // p \gets \beta p
+      axpy_vec( n, 1.0, r, p); // p \gets r + p
     }
+    print_vec( "u", n, p);
 
     cblas_dsymv( CblasRowMajor, LOWER, n, 1.0, A, n, p, 1, 0.0, w, 1); // w \gets Ap
-    gamma = cblas_ddot( n, p, 1, w, 1); // \gamma \gets <p, w>
+    print_vec( "w", n, w);
+    gamma = dot_vec( n, p, w); // \gamma \gets <p, w>
     alpha = rho/gamma;
-    cblas_daxpy( n, alpha, p, 1, x, 1); // x \gets x + \alpha p
-    cblas_daxpy( n, - alpha, w, 1, r, 1); // r \gets r - \alpha w;
+    axpy_vec( n, alpha, p, x); // x \gets x + \alpha p
+    print_vec( "x", n, x);
+    axpy_vec( n, - alpha, w, r); // r \gets r - \alpha w;
+    print_vec( "r", n, r);
     rho_old = rho;
-    rho = cblas_ddot( n, r, 1, r, 1); // \rho \gets <r, r>
+    rho = dot_vec( n, r, r); // \rho \gets <r, r>
     printf("rho = %g\n", rho);
 
+    if( k > 5) exit(0);
     k = k+1;
   }
 
@@ -169,7 +209,7 @@ int main( int argc, char *argv[]) {
   double *val;
   double *A, *b, *x0, *x;
 
-  f = fopen("../mtxMatrices/LFAT5.mtx", "r");
+  f = fopen("../mtxMatrices/bodyy5.mtx", "r");
   if( mm_read_banner( f, &matcode) != 0) {
     printf("Could not process Matrix Market banner.\n");
     exit(1);
@@ -255,8 +295,8 @@ int main( int argc, char *argv[]) {
   x[1] = 0;
   */
 
-  dense_cg( 14, 0.00001, M, A, b, x0, x);
-  sparse_cg( 14, 0.00001, M, nz, I, J, val, b, x0, x);
+  //dense_cg( 15, 0.01, M, A, b, x0, x);
+  sparse_cg( 200, 0.01, M, nz, I, J, val, b, x0, x);
 
   return 0;
 }
