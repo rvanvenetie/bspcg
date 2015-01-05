@@ -1,6 +1,6 @@
 CC = gcc
 WARNING_FLAGS=-Wall -Wextra -Werror-implicit-function-declaration -Wshadow -Wstrict-prototypes -pedantic
-CFLAGS= -O3  -std=c99 -DMCBSP_COMPATIBILITY_MODE
+CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
 IDIR = libs
 LFLAGS= $(IDIR)/compat-libmcbsp1.2.0.a -lpthread -lm -lblas #-lrt
 

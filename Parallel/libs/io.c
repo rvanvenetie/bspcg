@@ -69,11 +69,12 @@ ja[k] is the global column index.
     fp=fopen(filename,"r");
 
     fgets( linebuf, 1024, fp);
+    /*
     if( strstr( linebuf, "symmetric") == NULL) {
       printf("Matrix not symmetric!\n");
       exit(1);
     }
-
+    */
     //read comment block; first line after comment block will after this
     //contain the right information
     while( strstr( fgets( linebuf, 1024, fp), "%") != NULL);
