@@ -531,7 +531,7 @@ distributed_matrix load_symm_distributed_matrix_from_file( const char *filename,
 
   distributed_matrix mat = {
     .n = pn, .nz = pnz, 
-    .I = pI,
+    .inc = pI,
     .nrows = pnrows, .ncols = pncols, 
     .rowindex = prowindex, .colindex = pcolindex,
     .val = pval
@@ -568,10 +568,11 @@ void bspio( void) {
   printf("%lg\n", b_vals[1]);
   bsp_sync();
 }
-
+/*
 int main( int argc, char **argv) {
   bsp_init(bspio, argc, argv);
   P = bsp_nprocs();
   bspio();
   return 0;
 }
+*/

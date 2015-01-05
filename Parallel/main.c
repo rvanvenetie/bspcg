@@ -4,6 +4,8 @@
 #include <string.h>
 #include <time.h>
 #include <cblas.h>
+#include "io.h"
+#include "bspmv.h"
 #include "bspedupack.h"
 
 
@@ -56,8 +58,14 @@ double bspip_dist(int p, int s,  //Processor information
 
   return inprod_local;
 } 
+int P;
+#define kmax 15
+#define eps 0.01
+#define mat_file "../../mtxMatrices/bodyy5.mtx-P%d"
+#define dist_file "../../mtxMatrices/bodyy5.mtx-u%d"
+#define b_file   "../../mtxMatrices/bodyy5.mtx-b"
 
-#define DEBUG(...) ( if (s == 0) printf(__VA_ARGS__); )
+#define DEBUG(...) { if (s == 0) printf(__VA_ARGS__); }
 
 #define PRINTMATS 1
 void bspcg() {
@@ -73,64 +81,53 @@ void bspcg() {
   p= bsp_nprocs(); /* p = number of processors obtained */
   s= bsp_pid();    /* s = processor number */
   
+  /* Read matrix */
+  char matbuffer[1024], vecdisbuffer[1024], vecvalbuffer[1024];
+  snprintf( matbuffer, 1024, mat_file, p);
+  snprintf( vecdisbuffer, 1024, dist_file, p);
+  snprintf( vecvalbuffer, 1024, b_file);
+
+  distributed_matrix mat = load_symm_distributed_matrix_from_file( matbuffer, p, s);
+  vector_distribution dis = load_vector_distribution_from_file( vecdisbuffer, vecvalbuffer, p, s, &b);
+  bsp_sync();
   if (s == 0) {
-    bsp_begin(P);
-
-    int p = bsp_nprocs(); /* p=P */
-    int s = bsp_pid();
-
-    char matbuffer[1024], vecdisbuffer[1024], *vecvalbuffer = NULL;
-    snprintf( matbuffer, 1024, "../../mtxMatrices/bodyy5.mtx-P%d", p);
-    snprintf( vecdisbuffer, 1024, "../../mtxMatrices/bodyy5.mtx-u%d", p);
-    distributed_matrix mat = load_symm_distributed_matrix_from_file( matbuffer, p, s);
-    vector_distribution dis = load_vector_distribution_from_file( vecdisbuffer, p, s);
-    double *vals = vecallocd( dis.nv);
-    load_vector_values_from_file( vecvalbuffer, dis, p, s, vals);
-    bsp_sync();
-    //Read the matrix here
-    //bspinput2triple?
-    //triple2icrs
-
-    printf("Solving sparse system Ax=b, dim=%i, nz=%i, kmax=%i, eps=%f, with\n", n, nz, kmax, eps);
+    printf("Solving sparse system Ax=b, dim=%i, nz=%i, kmax=%i, eps=%f, with\n", mat.n, mat.nz, kmax, eps);
     printf("Using %d processors\n",p);
   }
-
-  if( PRINTMATS) {
-    //Print matrix here? Might be hard, because it is
-    //distributed over the processors. 
-  }
-  /* Matrix is now loaded. Load the vector distribution */
-  bspinputvec(p,s,vfilename,&n,&nv,&vindex);
-  /* Input vector has local index. Make array v[i] with global index? */
-  v= vecallocd(nv);
-  for(i=0; i<nv; i++){
-    iglob= vindex[i];
-    v[i]= iglob+1;
-  }
-
+  /* Matrix, vector dist and b is loaded */
   /* Loading phase done, bsp_sync, add timer?*/
-  bsp_sync();
 
   /* Initalize bsp_mv */
-  bspmv_init
+  //This are arrays needed for bspmv
+  int *srcprocv, *srcindv, *destprocu, *destindu;
+
+  srcprocv  = vecalloci(mat.ncols);
+  srcindv   = vecalloci(mat.ncols);
+  destprocu = vecalloci(mat.nrows);
+  destindu  = vecalloci(mat.nrows);
+
+  bspmv_init(p, s, mat.n, mat.nrows, mat.ncols,
+             dis.nv, dis.nv, mat.rowindex, mat.colindex,
+	     dis.vindex, dis.vindex, 
+	     srcprocv, srcindv, destprocu, destindu);
 
   int k = 0; //Iterations
   //Initalize vectors used in algorithm, b is already initialized
-  *r = vecallocd(nv); 
-  *u = vecallocd(nv);
-  *x = vecallocd(nv);
-  *w = vecallocd(nv);
+  r = vecallocd(dis.nv); 
+  u = vecallocd(dis.nv);
+  x = vecallocd(dis.nv);
+  w = vecallocd(dis.nv);
   //u and w are initialized in the algorithm.
 
   //Initial value of x = 0, r = b - Ax = b.
-  for (int i = 0; i < nv; i++) {
+  for (int i = 0; i < dis.nv; i++) {
     x[i] = 0;
     r[i] = b[i];
   }
 
   //Rho used in algo, initial rho = <r,r> = <b,b>
   double rho, rho_old;
-  rho = bppip_dist(p,s,r,r, nv);
+  rho = bspip_dist(p,s,r,r, dis.nv);
 
   //We store |b|^2 to calculate the relative norm of r
   //|b|^2 = <b,b> = rho
@@ -142,25 +139,28 @@ void bspcg() {
     DEBUG("Iteration %d, rho = %g\n", k + 1, rho);
     
     if( k == 0) {
-      cblas_dcopy(nv, r, 1, p, 1); //u \gets r
+      cblas_dcopy(dis.nv, r, 1, u, 1); //u \gets r
     } else {
       beta = rho/rho_old;
       //u \gets r + beta u
-      cblas_dscal(nv, beta, p, 1); // u \gets \beta p
-      cblas_daxpy(nv, 1.0, r, 1, p, 1); // u \gets r + p
+      cblas_dscal(dis.nv, beta, u, 1); // u \gets \beta p
+      cblas_daxpy(dis.nv, 1.0, r, 1, u, 1); // u \gets r + p
     }
     // w \gets Au
-    bspmv();
+    bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
+	  mat.val, mat.inc,
+	  srcprocv, srcindv, destprocu, destindu,
+	  dis.nv, dis.nv, u, w);
     // \gamma \gets <u, w>
-    gamma = bspip(p,s, u,w, nv);
+    gamma = bspip_dist(p,s, u,w, dis.nv);
     alpha = rho/gamma;
     //  x \gets x + alpha u
-    cblas_daxpy( n, alpha, u, 1, x, 1); 
+    cblas_daxpy(mat.n, alpha, u, 1, x, 1); 
     //  r \gets r - alpha w
-    cblas_daxpy( n, - alpha, w, 1, r, 1); 
+    cblas_daxpy(mat.n, - alpha, w, 1, r, 1); 
     rho_old = rho;
     // \rho \gets <r ,r>
-    rho = bspip(p,s, r,r, nv);
+    rho = bspip_dist(p,s, r,r, dis.nv);
     k++;
   }
 
@@ -177,13 +177,13 @@ void bspcg() {
    */
   double * x_glob;
   if (s == 0)
-    x_glob = vecallocd(x_glob);
+    x_glob = vecallocd(dis.n);
 
-  bsp_push_reg(x_glob, n*SZDBL);
+  bsp_push_reg(x_glob, dis.n*SZDBL);
   bsp_sync();
-  for (int i = 0; i < nv; i++)
+  for (int i = 0; i < dis.nv; i++)
   {
-    index_glob = bla;
+    int index_glob = dis.vindex[i];
     bsp_put(0, &x[i], x_glob, index_glob * SZDBL, SZDBL);
   }
   bsp_pop_reg(x_glob);
@@ -191,7 +191,7 @@ void bspcg() {
   
   if (s == 0) {
     printf("Solution vector:\n");
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i <dis.n; i++)
       printf("%g\n", x_glob[i]);
   }
 
@@ -207,26 +207,17 @@ void bspcg() {
 
 
 int main(int argc, char *argv[]) {
-  bsp_init(bspprimes,argc, argv); //Execute bspprimes after we start with initalization
-  if (argc == 3) {
-    P = atoi(argv[1]);
-    N = atoi(argv[2]);
-  } else if (BENCHMARK) {
-    P = bsp_nprocs();
-    N = 10000;
-  } else {
-    printf("How many processors do you want to use?\n"); 
-    fflush(stdout);
-    scanf("%d",&P);
-    printf("Please enter n:\n"); fflush(stdout);
-    scanf("%d",&N);
-  }
-  if(N<0)
-    bsp_abort("Error in input: n is negative");
+  bsp_init(bspcg,argc, argv); //Execute after we start with initalization
+  //Handle arguments
+
+  printf("How many processors do you want to use?\n"); 
+  fflush(stdout);
+  scanf("%d",&P);
+
   if (P > bsp_nprocs()){
-      printf("Sorry, not enough processors available.\n");
-      exit(1);
+    printf("Sorry, not enough processors available.\n");
+    exit(1);
   }
-  bspprimes();
+  bspcg();
   exit(0);
 }
