@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <Accelerate/Accelerate.h>
-#include "../mmio.h"
+#ifdef __APPLE__
+  #include <Accelerate/Accelerate.h>
+#else
+  #include <cblas.h>
+#endif
+#include "mmio.h"
 
 #define UPPER 121
 #define LOWER 122
