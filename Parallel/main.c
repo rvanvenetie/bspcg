@@ -3,246 +3,192 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include <cblas.h>
 #include "bspedupack.h"
 
-#define MODE GOLDBACH
-#define BENCHMARK 0
-
-#define TWIN 0
-#define GOLDBACH 1
-#define JUST_PRIMES 2
-#define JUST_ONCE 1
 
 /*
- * Usage: ./main <p> <n> to generate all primes below n with p nodes. In 
- * benchmark mode, only use first argument.
+ * Edited version of bspip that uses vectors that are stored
+ * according to a certain distribution (both must have the same).
+
+ * Input:
+ * p - number of processors.
+ * s - current processor number.
+ * x - locally stored vector elements of vector x
+ * y - locally stored vector elements of vector y
+ * nv - amount of vector elements locally stored.
  */
+double bspip_dist(int p, int s,  //Processor information  
+    double * x, double * y,      //Vector data
+    int nv)                      //Distribution information
+{
+  /*
+   * Every processor calculates its own local inner product.
+   * It then puts this value in all the other processors.
+   * After which every processor calculates the total inner
+   * product
+   */
+  //Initialize array that holds all partial sums
+  double inprod_local;
+  double * inprod;
+  inprod = vecallocd(p);
+  bsp_push_reg(inprod, p * SZDBL);
+  bsp_sync();
 
-typedef char * sieve_array;
-#define PRIME 1
-#define COMPOSITE 0
+  //Calculate local inproduct
+  inprod_local = 0;
+  for (int i = 0; i < nv; i++)
+    inprod_local += x[i] * y[i];
 
-void print_sieve_primes(int length, int offset,  sieve_array sieve) {
-  for (int i = 0; i < length; i++) {
-    //printf("%d ", i + offset);
-    if (sieve[i] == PRIME) {
-      printf("%d\t", i + offset);
-    }  
-  }
-}
+  //Put the local value in all the processors
+  for (int t = 0; t < p; t++) 
+    bsp_put(t, &inprod_local, inprod, s * SZDBL, SZDBL);
 
-void print_twin_primes(sieve_array sieve, int n) {
-  for (int i = 2; i <= n - 2; i++)
-    if ((sieve[i] == PRIME) && (sieve[i+2] == PRIME)) {
-      printf("(%d,%d) ", i,i+2);
-    }  
-}
+  bsp_sync();
+  //Calculate the actual inner product
+  inprod_local = 0;
+  for (int t = 0; t < p; t++)
+    inprod_local += inprod[t];
 
-/*
- * Index in the sieve_array corresponds to the actual number
- * Array result must be initalized.
- * 
- * Does the sieve_array indexing for all primes < sqrt_N
- * This means that index 0 and 1 are undefined.
- */
-void sieve_primes_sqrt(int n, sieve_array result) {
-  int sqrtN = (int) sqrt(n);
-  if (MODE == TWIN)
-    sqrtN += 2;
-    
-  for (int i = 2; i <= sqrtN; i++) {
-    if (result[i] == PRIME) {
-      for (int j = i*i; j <= sqrtN; j += i) {
-        result[j] = COMPOSITE;
-      }
-    }
-  }
-}
+  //Free data stuff
+  bsp_pop_reg(inprod);
+  vecfreed(inprod);
 
-/*
- * Calculates the blocksize for processor s. Also returns the starting number + end number.
- * Distributes the numbers floor(sqrt(n))..n over p processors.
- */
-void sieve_primes_dist(int p, int s, int n, int * start, int * end, int * blocksize) {
-  int first_num  = (int) sqrt(n) + 1;
-  int n_left = n - first_num + 1;
-  *blocksize = (int) (n_left) / p;
-  
-  *start = (*blocksize) * s + first_num; 
+  return inprod_local;
+} 
 
-  //The last block needs to do more work
-  if (s == p - 1)  
-    *blocksize += n_left - p * (*blocksize);
-  else if (MODE == TWIN) //Let the other blocks calculate two more numbers 
-    *blocksize += 2; 
-    
-  *end = *start + (*blocksize) - 1; 
-}
+#define DEBUG(...) ( if (s == 0) printf(__VA_ARGS__); )
 
-/*
- * Cross out all multiples of primes in inital primes (the first 0 .. sqrt N).
- * Use easy block structure. Returns pointer to start of the block in all_primes.
- */
-sieve_array sieve_primes_block(int p,int s,int n,sieve_array all_primes) {
-  int start,end,blocksize;
-  int sqrtN = (int) sqrt(n);
-  
-  sieve_primes_dist(p,s,n,&start,&end,&blocksize);
-  sieve_array A = all_primes + start;
-  //memset(A, PRIME, blocksize); //Initialize
-  
-  for (int i = 2; i <= sqrtN; i++) {
-    if (all_primes[i] == PRIME) {
-      int j = start;
-    
-      if (j % i) //j is not a multiple of i, take next multiple of i.
-        j += i - j % i;
-      if( j < i*i)
-        j = i*i;
-      
-      for (; j <= end; j += i) {
-          A[j-start] = COMPOSITE;
-      }
-    }
-  }
-  return A;  
-}
-
-void twin_primes_block(sieve_array primes, int offset, int size) {
-  for (int i = 0; i < size - 2; i++) 
-    if (!((primes[i + offset] == PRIME) && (primes[i + offset +2] == PRIME)))
-      primes[i+offset] = COMPOSITE;  
-}
-
-int P,N; //Global stuff
-
-void bspprimes() {
-  int p,s,n;
-  double time_start,time_init_primes,  time_initial, time_sieve, time_end;
-  sieve_array block_primes, all_primes;
+#define PRINTMATS 1
+void bspcg() {
+  int p,s; //Defaults for bsp
+  //Vectors
+  double *b; //Holds rhs  
+  double *r; //Holds the residual
+  double *x; //Holds the approximate solution
+  double *u; //Used in the algorithm to update x
+  double *w; //Used in the algorithm to calculate alpha
   
   bsp_begin(P);
   p= bsp_nprocs(); /* p = number of processors obtained */
   s= bsp_pid();    /* s = processor number */
+  
+  if (s == 0) {
+    //Read the matrix here
+    //bspinput2triple?
+    //triple2icrs
+
+    printf("Solving sparse system Ax=b, dim=%i, nz=%i, kmax=%i, eps=%f, with\n", n, nz, kmax, eps);
+    printf("Using %d processors\n",p);
+  }
+
+  if( PRINTMATS) {
+    //Print matrix here? Might be hard, because it is
+    //distributed over the processors. 
+  }
+  /* Matrix is now loaded. Load the vector distribution */
+  bspinputvec(p,s,vfilename,&n,&nv,&vindex);
+  /* Input vector has local index. Make array v[i] with global index? */
+  v= vecallocd(nv);
+  for(i=0; i<nv; i++){
+    iglob= vindex[i];
+    v[i]= iglob+1;
+  }
+
+  /* Loading phase done, bsp_sync, add timer?*/
+  bsp_sync();
+
+  /* Initalize bsp_mv */
+  bspmv_init
+
+  int k = 0; //Iterations
+  //Initalize vectors used in algorithm, b is already initialized
+  *r = vecallocd(nv); 
+  *u = vecallocd(nv);
+  *x = vecallocd(nv);
+  *w = vecallocd(nv);
+  //u and w are initialized in the algorithm.
+
+  //Initial value of x = 0, r = b - Ax = b.
+  for (int i = 0; i < nv; i++) {
+    x[i] = 0;
+    r[i] = b[i];
+  }
+
+  //Rho used in algo, initial rho = <r,r> = <b,b>
+  double rho, rho_old;
+  rho = bppip_dist(p,s,r,r, nv);
+
+  //We store |b|^2 to calculate the relative norm of r
+  //|b|^2 = <b,b> = rho
+  double normbsq = rho;
+
+  //bsp_sync?
+  while( rho > eps*eps*normbsq && k < kmax) {
+    double beta, gamma, alpha;
+    DEBUG("Iteration %d, rho = %g\n", k + 1, rho);
     
-  #if BENCHMARK == 1
-  if (s == 0)
-    N = 1;
-  for (int i_bench = 0; i_bench < 8; i_bench++) {
-    if (s == 0)
-      N = N * 10;
-  #endif
-
-  n = N;
-  bsp_sync();
-  time_start = bsp_time();
-
-  //First register n. Registration needs a sync step
-  bsp_push_reg(&n,SZINT);
-  bsp_sync();
-
-  //All get the value of n from the first processor.
-  bsp_get(0,&n,0,&n,SZINT);
-  bsp_sync();
-
-  //We now have the value of n
-  //We do not need the linked version of n anymore, delete superstep
-  bsp_pop_reg(&n);
-  
-  //Allocate memory array for all primes and bind register
-  all_primes = malloc(n+1);
-  memset(all_primes, PRIME, n+1);
-  bsp_push_reg(all_primes, n+1);
-  
-  time_initial = bsp_time();
-  
-  //Let this processor get all the initial primes
-  sieve_primes_sqrt(n, all_primes);
-  time_init_primes = bsp_time();
-  
-  //Evenly distribute blocks across processors and let each processor
-  //cross out the primes in his block.
-  int start,end,blocksize;
-  sieve_primes_dist(p,s,n,&start,&end,&blocksize);  
-  block_primes = sieve_primes_block(p,s,n, all_primes);
-  
-  //Possibly calculate twin primes
-  if (MODE == TWIN) {
-    if (s == 0)
-      twin_primes_block(all_primes, 0 , (int) sqrt(n) + 2);
-  
-    twin_primes_block(all_primes, start, blocksize);
-  }
-  time_sieve = bsp_time();
-  
-  /* Start communicating all primes */
-  bsp_sync();
-  
-  #if JUST_ONCE == 1
-  //Communicate primes in a block
-  for (int t= 0; t < p; t++)
-    bsp_put(t,block_primes,all_primes, start, blocksize);
-  #else
-  //Communicate primes separately
-  for (int t = 0; t < p; t++) 
-    for (int j = start; j <= end; j++)
-      if (all_primes[j] == PRIME)
-        bsp_put(t,all_primes + j, all_primes, j, 1); 
-  #endif
-  bsp_sync();
-   
-  time_end = bsp_time();
-  /* Now every processor should have all the primes in all_primes */
-  if (BENCHMARK && (s ==0)) {
-    printf("%d\t%d\t%f\t%f\t%f\t%f\t%f\n",
-       p,
-       n,
-       time_initial - time_start,
-       time_init_primes - time_initial,
-       time_sieve - time_init_primes,
-       time_end - time_sieve,
-       time_end - time_start);
-       
-  } else if (s == 0) {
-    printf("***** TIMING REPORT N = %d FOR PROCESSOR %d OF  %d *****\n",n, s + 1, p);
-    printf("Begin block: %d \t Block size: %d\n", start, blocksize);
-    printf("Initial communication:   %f sec\n", time_initial - time_start);
-    printf("Initial prime gathering: %f sec\n", time_init_primes - time_initial); 
-    printf("Sieving prime block:     %f sec\n", time_sieve - time_init_primes);
-    printf("Communication primes:    %f sec\n", time_end - time_sieve);
-    printf("Total:                   %f sec\n", time_end - time_start);
-    printf("***** END TIMING REPORT *****\n");
-    //print_sieve_primes(n+1,0,all_primes);
-  }
-  
-  /*
-   * Goldbach mode? We now have all primes. Let us test the goldbach conjecture on
-   * a dataset. We use cyclic distribution here, as we expect this to evenly
-   * distribute the computing cost. 
-   */
-  if (MODE == GOLDBACH){
-    printf("aasdf\n");
-    double time_gold_start = bsp_time();
-    int goldbach_fails;
-    for (int i = 4 + s*2; i <= n; i += P*2) {
-      goldbach_fails = 1;
-      for (int j = 2; j <= i/2; j++)
-        if ((all_primes[j] == PRIME) && (all_primes[i-j] == PRIME))
-          goldbach_fails = 0;
-      if( goldbach_fails) {
-        printf("Goldbach for processor %d:\n  Failed %d\n", s,goldbach_fails);
-      }
+    if( k == 0) {
+      cblas_dcopy(nv, r, 1, p, 1); //u \gets r
+    } else {
+      beta = rho/rho_old;
+      //u \gets r + beta u
+      cblas_dscal(nv, beta, p, 1); // u \gets \beta p
+      cblas_daxpy(nv, 1.0, r, 1, p, 1); // u \gets r + p
     }
-    double time_gold_end = bsp_time();
-    printf("Processor %d Golbach Time: %f\n", s, time_gold_end - time_gold_start);
-  }
-  bsp_pop_reg(all_primes);
-  free(all_primes);
-  #if BENCHMARK == 1
-    bsp_sync();
+    // w \gets Au
+    bspmv();
+    // \gamma \gets <u, w>
+    gamma = bspip(p,s, u,w, nv);
+    alpha = rho/gamma;
+    //  x \gets x + alpha u
+    cblas_daxpy( n, alpha, u, 1, x, 1); 
+    //  r \gets r - alpha w
+    cblas_daxpy( n, - alpha, w, 1, r, 1); 
+    rho_old = rho;
+    // \rho \gets <r ,r>
+    rho = bspip(p,s, r,r, nv);
+    k++;
   }
 
-  #endif
+  DEBUG("Solution found after %i iterations! rho = %f\n", k, rho);
+  //bsp_sync?
+  //Calculate w = Ax
+  //Print timing and resulting vector w/b 
+
+  /*
+   * We now give processor zero the solution vector.
+   * Note that we probably do not want to do this in the real
+   * application, as this vector might be to big to store
+   * on one processor
+   */
+  double * x_glob;
+  if (s == 0)
+    x_glob = vecallocd(x_glob);
+
+  bsp_push_reg(x_glob, n*SZDBL);
+  bsp_sync();
+  for (int i = 0; i < nv; i++)
+  {
+    index_glob = bla;
+    bsp_put(0, &x[i], x_glob, index_glob * SZDBL, SZDBL);
+  }
+  bsp_pop_reg(x_glob);
+  bsp_sync();
+  
+  if (s == 0) {
+    printf("Solution vector:\n");
+    for (int i = 0; i < n; i++)
+      printf("%g\n", x_glob[i]);
+  }
+
+  vecfreed(u);
+  vecfreed(x);
+  vecfreed(r);
+  vecfreed(w);
+  vecfreed(b);
+  if (s == 0)
+    vecfreed(x_glob);
   bsp_end();
 }
 

@@ -1,0 +1,3 @@
+[submodule "References/bsp-cg"]
+	path = References/bsp-cg
+	url = git@github.com:toothbrush/bsp-cg.git
