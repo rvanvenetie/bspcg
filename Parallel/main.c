@@ -18,6 +18,26 @@ int print_vec( const char *name, const int n, const double *x) {
 
   return 0;
 }
+//p \gets r
+void copy_vec( const int n, const double *r, double *p) {
+  for( int i = 0; i < n; i++) {
+    p[i] = r[i];
+  }
+}
+
+//p \gets \beta p
+void scale_vec( const int n, const double beta, double *p) {
+  for( int i = 0; i < n; i++) {
+    p[i] *= beta;
+  }
+}
+
+//r \gets r + \alpha w
+void axpy_vec( const int n, const double alpha, const double *w, double *r) {
+  for( int i = 0; i < n; i++) {
+    r[i] += alpha * w[i];
+  }
+}
 /*
  * Edited version of bspip that uses vectors that are stored
  * according to a certain distribution (both must have the same).
@@ -147,12 +167,12 @@ void bspcg() {
     DEBUG("Iteration %d, rho = %g\n", k + 1, rho);
     
     if( k == 0) {
-      cblas_dcopy(dis.nv, r, 1, u, 1); //u \gets r
+      copy_vec(dis.nv, r, u); //u \gets r
     } else {
       beta = rho/rho_old;
       //u \gets r + beta u
-      cblas_dscal(dis.nv, beta, u, 1); // u \gets \beta p
-      cblas_daxpy(dis.nv, 1.0, r, 1, u, 1); // u \gets r + p
+      scale_vec(dis.nv, beta, u); // u \gets \beta p
+      axpy_vec(dis.nv, 1.0, r, u); // u \gets r + p
     }
     //print_vec("u", dis.nv, u);
     //print_vec("A", mat.nz, mat.val);
@@ -166,9 +186,9 @@ void bspcg() {
     gamma = bspip_dist(p,s, u,w, dis.nv);
     alpha = rho/gamma;
     //  x \gets x + alpha u
-    cblas_daxpy(dis.nv, alpha, u, 1, x, 1); 
+    axpy_vec(dis.nv, alpha, u, x); 
     //  r \gets r - alpha w
-    cblas_daxpy(dis.nv, - alpha, w, 1, r, 1); 
+    axpy_vec(dis.nv, - alpha, w, r); 
     rho_old = rho;
     // \rho \gets <r ,r>
     rho = bspip_dist(p,s, r,r, dis.nv);
