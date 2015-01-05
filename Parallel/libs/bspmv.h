@@ -1,3 +1,4 @@
+int nloc(int p, int s, int n);
 void bspmv_init(int p, int s, int n, int nrows, int ncols,
                 int nv, int nu, int *rowindex, int *colindex,
                 int *vindex, int *uindex, int *srcprocv, int *srcindv,

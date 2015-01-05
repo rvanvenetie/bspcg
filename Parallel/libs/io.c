@@ -1,4 +1,5 @@
 #include "io.h"
+#include "bspmv.h"
 #include "bspedupack.h"
 #include <assert.h>
 #include <string.h>
@@ -367,12 +368,6 @@ By convention, the column index of the -1'th nonzero is 0.
   *pcolindex= colindex;
 
 } /* end triple2icrs */
-
-int nloc(int p, int s, int n){
-  /* Compute number of local components of processor s for vector
-   * of length n distributed cyclically over p processors. */
-  return (n+p-s-1)/p ; 
-} /* end nloc */
 
 void bspinputvec(int p, int s, const char *disfile, const char *valfile,
     int *pn, int *pnv, int **pvindex, double **pvval){
