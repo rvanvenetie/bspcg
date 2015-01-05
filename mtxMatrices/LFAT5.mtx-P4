@@ -1,0 +1,53 @@
+%%MatrixMarket distributed-matrix coordinate real symmetric
+%-------------------------------------------------------------------------------
+% UF Sparse Matrix Collection, Tim Davis
+% http://www.cise.ufl.edu/research/sparse/matrices/Oberwolfach/LFAT5
+% name: Oberwolfach/LFAT5
+% [Oberwolfach: linear 1D beam]
+% id: 1440
+% date: 2004
+% author: J. Lienemann, A. Greiner, J. Korvink
+% ed: E. Rudnyi
+% fields: name title A id notes aux date author ed kind
+% aux: M E B C
+% kind: model reduction problem
+%-------------------------------------------------------------------------------
+% notes:
+% Primary matrix in this model reduction problem is the Oberwolfach K matrix
+%-------------------------------------------------------------------------------
+14 14 30 4
+0
+13
+18
+24
+30
+2 2 1.25664e+07
+6 2 -6.2832e+06
+3 3 0.608806
+7 3 -0.304403
+5 5 3.14176
+8 5 -94.2528
+6 6 1.25664e+07
+10 6 -6.2832e+06
+7 7 0.608806
+11 7 -0.304403
+8 8 15080.4
+10 10 1.25664e+07
+11 11 0.608806
+9 9 3.14176
+9 5 0.78544
+5 1 0.78544
+4 1 -94.2528
+1 1 1.57088
+12 8 -7540.22
+12 9 -94.2528
+12 12 15080.4
+14 12 94.2528
+14 13 0.78544
+14 14 1.57088
+13 13 3.14176
+13 9 0.78544
+13 8 94.2528
+9 4 94.2528
+8 4 -7540.22
+4 4 15080.4
