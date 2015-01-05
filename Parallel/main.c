@@ -74,6 +74,19 @@ void bspcg() {
   s= bsp_pid();    /* s = processor number */
   
   if (s == 0) {
+    bsp_begin(P);
+
+    int p = bsp_nprocs(); /* p=P */
+    int s = bsp_pid();
+
+    char matbuffer[1024], vecdisbuffer[1024], *vecvalbuffer = NULL;
+    snprintf( matbuffer, 1024, "../../mtxMatrices/bodyy5.mtx-P%d", p);
+    snprintf( vecdisbuffer, 1024, "../../mtxMatrices/bodyy5.mtx-u%d", p);
+    distributed_matrix mat = load_symm_distributed_matrix_from_file( matbuffer, p, s);
+    vector_distribution dis = load_vector_distribution_from_file( vecdisbuffer, p, s);
+    double *vals = vecallocd( dis.nv);
+    load_vector_values_from_file( vecvalbuffer, dis, p, s, vals);
+    bsp_sync();
     //Read the matrix here
     //bspinput2triple?
     //triple2icrs
