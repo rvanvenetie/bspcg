@@ -9,6 +9,15 @@
 #include "bspedupack.h"
 
 
+int print_vec( const char *name, const int n, const double *x) {
+  printf( "Printing %s (len %i):\n", name, n);
+  for( int i = 0; i < n; i++) {
+    printf("%f\n", x[i]);
+  }
+  printf("\n");
+
+  return 0;
+}
 /*
  * Edited version of bspip that uses vectors that are stored
  * according to a certain distribution (both must have the same).
@@ -59,11 +68,11 @@ double bspip_dist(int p, int s,  //Processor information
   return inprod_local;
 } 
 int P;
-#define kmax 15
+#define kmax 200
 #define eps 0.01
-#define mat_file "../mtxMatrices/bodyy5.mtx-P%d"
+#define mat_file  "../mtxMatrices/bodyy5.mtx-P%d"
 #define dist_file "../mtxMatrices/bodyy5.mtx-u%d"
-#define b_file   "../mtxMatrices/bodyy5.mtx-b"
+#define b_file    "../mtxMatrices/bodyy5.mtx-b"
 
 #define DEBUG(...) { if (s == 0) printf(__VA_ARGS__); }
 
@@ -132,7 +141,6 @@ void bspcg() {
   //We store |b|^2 to calculate the relative norm of r
   //|b|^2 = <b,b> = rho
   double normbsq = rho;
-
   //bsp_sync?
   while( rho > eps*eps*normbsq && k < kmax) {
     double beta, gamma, alpha;
@@ -146,25 +154,34 @@ void bspcg() {
       cblas_dscal(dis.nv, beta, u, 1); // u \gets \beta p
       cblas_daxpy(dis.nv, 1.0, r, 1, u, 1); // u \gets r + p
     }
+    //print_vec("u", dis.nv, u);
+    //print_vec("A", mat.nz, mat.val);
     // w \gets Au
     bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
 	  mat.val, mat.inc,
 	  srcprocv, srcindv, destprocu, destindu,
 	  dis.nv, dis.nv, u, w);
+    //print_vec("w", dis.nv, w);
     // \gamma \gets <u, w>
     gamma = bspip_dist(p,s, u,w, dis.nv);
     alpha = rho/gamma;
     //  x \gets x + alpha u
-    cblas_daxpy(mat.n, alpha, u, 1, x, 1); 
+    cblas_daxpy(dis.nv, alpha, u, 1, x, 1); 
     //  r \gets r - alpha w
-    cblas_daxpy(mat.n, - alpha, w, 1, r, 1); 
+    cblas_daxpy(dis.nv, - alpha, w, 1, r, 1); 
     rho_old = rho;
     // \rho \gets <r ,r>
     rho = bspip_dist(p,s, r,r, dis.nv);
     k++;
+    //print_vec("x", dis.nv, x);
+    //print_vec("r", dis.nv, r);
   }
 
-  DEBUG("Solution found after %i iterations! rho = %f\n", k, rho);
+  if (k < kmax) {
+    DEBUG("Solution found after %i iterations! rho = %f\n", k, rho);
+  } else {
+    DEBUG("CG stopped, maximum iterations (%i) reached. rho = %g\n", k, rho);
+  }
   //bsp_sync?
   //Calculate w = Ax
   //Print timing and resulting vector w/b 
@@ -175,9 +192,9 @@ void bspcg() {
    * application, as this vector might be to big to store
    * on one processor
    */
+  
   double * x_glob;
-  if (s == 0)
-    x_glob = vecallocd(dis.n);
+  x_glob = vecallocd(dis.n);
 
   bsp_push_reg(x_glob, dis.n*SZDBL);
   bsp_sync();
@@ -186,22 +203,27 @@ void bspcg() {
     int index_glob = dis.vindex[i];
     bsp_put(0, &x[i], x_glob, index_glob * SZDBL, SZDBL);
   }
-  bsp_pop_reg(x_glob);
+
   bsp_sync();
-  
+  bsp_pop_reg(x_glob);
+  /* 
   if (s == 0) {
     printf("Solution vector:\n");
     for (int i = 0; i <dis.n; i++)
       printf("%g\n", x_glob[i]);
   }
+  */
+  vecfreed(x_glob);
 
   vecfreed(u);
   vecfreed(x);
   vecfreed(r);
   vecfreed(w);
   vecfreed(b);
-  if (s == 0)
-    vecfreed(x_glob);
+  vecfreei(srcprocv);
+  vecfreei(srcindv);
+  vecfreei(destprocu);
+  vecfreei(destindu);
   bsp_end();
 }
 
