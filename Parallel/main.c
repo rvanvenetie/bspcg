@@ -4,88 +4,11 @@
 #include <string.h>
 #include <time.h>
 #include "io.h"
+#include "vec.h"
 #include "bspmv.h"
+#include "bspip.h"
 #include "bspedupack.h"
 
-
-int print_vec( const char *name, const int n, const double *x) {
-  printf( "Printing %s (len %i):\n", name, n);
-  for( int i = 0; i < n; i++) {
-    printf("%f\n", x[i]);
-  }
-  printf("\n");
-
-  return 0;
-}
-//p \gets r
-void copy_vec( const int n, const double *r, double *p) {
-  for( int i = 0; i < n; i++) {
-    p[i] = r[i];
-  }
-}
-
-//p \gets \beta p
-void scale_vec( const int n, const double beta, double *p) {
-  for( int i = 0; i < n; i++) {
-    p[i] *= beta;
-  }
-}
-
-//r \gets r + \alpha w
-void axpy_vec( const int n, const double alpha, const double *w, double *r) {
-  for( int i = 0; i < n; i++) {
-    r[i] += alpha * w[i];
-  }
-}
-/*
- * Edited version of bspip that uses vectors that are stored
- * according to a certain distribution (both must have the same).
-
- * Input:
- * p - number of processors.
- * s - current processor number.
- * x - locally stored vector elements of vector x
- * y - locally stored vector elements of vector y
- * nv - amount of vector elements locally stored.
- */
-double bspip_dist(int p, int s,  //Processor information  
-    double * x, double * y,      //Vector data
-    int nv)                      //Distribution information
-{
-  /*
-   * Every processor calculates its own local inner product.
-   * It then puts this value in all the other processors.
-   * After which every processor calculates the total inner
-   * product
-   */
-  //Initialize array that holds all partial sums
-  double inprod_local;
-  double * inprod;
-  inprod = vecallocd(p);
-  bsp_push_reg(inprod, p * SZDBL);
-  bsp_sync();
-
-  //Calculate local inproduct
-  inprod_local = 0;
-  for (int i = 0; i < nv; i++)
-    inprod_local += x[i] * y[i];
-
-  //Put the local value in all the processors
-  for (int t = 0; t < p; t++) 
-    bsp_put(t, &inprod_local, inprod, s * SZDBL, SZDBL);
-
-  bsp_sync();
-  //Calculate the actual inner product
-  inprod_local = 0;
-  for (int t = 0; t < p; t++)
-    inprod_local += inprod[t];
-
-  //Free data stuff
-  bsp_pop_reg(inprod);
-  vecfreed(inprod);
-
-  return inprod_local;
-} 
 int P;
 #define kmax 200
 #define eps 0.01
@@ -166,34 +89,34 @@ void bspcg() {
     DEBUG("Iteration %d, rho = %g\n", k + 1, rho);
     
     if( k == 0) {
-      copy_vec(dis.nv, r, u); //u \gets r
+      vec_copy(dis.nv, r, u); //u \gets r
     } else {
       beta = rho/rho_old;
       //u \gets r + beta u
-      scale_vec(dis.nv, beta, u); // u \gets \beta p
-      axpy_vec(dis.nv, 1.0, r, u); // u \gets r + p
+      vec_scale(dis.nv, beta, u); // u \gets \beta p
+      vec_axpy(dis.nv, 1.0, r, u); // u \gets r + p
     }
-    //print_vec("u", dis.nv, u);
-    //print_vec("A", mat.nz, mat.val);
+    //vec_print("u", dis.nv, u);
+    //vec_print("A", mat.nz, mat.val);
     // w \gets Au
     bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
 	  mat.val, mat.inc,
 	  srcprocv, srcindv, destprocu, destindu,
 	  dis.nv, dis.nv, u, w);
-    //print_vec("w", dis.nv, w);
+    //vec_print("w", dis.nv, w);
     // \gamma \gets <u, w>
     gamma = bspip_dist(p,s, u,w, dis.nv);
     alpha = rho/gamma;
     //  x \gets x + alpha u
-    axpy_vec(dis.nv, alpha, u, x); 
+    vec_axpy(dis.nv, alpha, u, x); 
     //  r \gets r - alpha w
-    axpy_vec(dis.nv, - alpha, w, r); 
+    vec_axpy(dis.nv, - alpha, w, r); 
     rho_old = rho;
     // \rho \gets <r ,r>
     rho = bspip_dist(p,s, r,r, dis.nv);
     k++;
-    //print_vec("x", dis.nv, x);
-    //print_vec("r", dis.nv, r);
+    //vec_print("x", dis.nv, x);
+    //vec_print("r", dis.nv, r);
   }
 
   if (k < kmax) {
