@@ -34,3 +34,6 @@
 *.blg
 *.dvi
 *.log
+
+Mondriaan4/tests/*
+mtxMatrices/*

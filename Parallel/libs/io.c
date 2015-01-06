@@ -85,7 +85,6 @@ ja[k] is the global column index.
       exit(1);
     }
 
-    printf("Matrix has %d nonzeros.\n",nzA);
     if(pA!=p)
       bsp_abort("Error: p not equal to p(A)\n"); 
     if(mA!=nA)

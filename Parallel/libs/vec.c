@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "vec.h"
 
 int vec_print( const char *name, const int n, const double *x) {
@@ -9,6 +10,18 @@ int vec_print( const char *name, const int n, const double *x) {
   printf("\n");
 
   return 0;
+}
+
+double rand_double(void) {
+  return ( (double) rand() / (double) RAND_MAX);
+}
+
+//p \gets random
+void vec_random( const int n, const int seed, double *p) {
+  srand( seed);
+  for( int i = 0; i < n; i++) {
+    p[i] = rand_double();
+  }
 }
 
 //p \gets r

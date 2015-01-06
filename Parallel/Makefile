@@ -9,7 +9,7 @@ OBJ= main.o $(IDIR)/{bspedupack.o,io.o,bspmv.o,bspip.o,vec.o}
 %.o: %.c
 	$(CC) -I $(IDIR) -c $(CFLAGS) $<
 
-all: main
+all: bsp main
 
 main: main.o
 	$(CC) $(CFLAGS) -o main $(OBJ) $(LFLAGS)
