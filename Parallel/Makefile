@@ -14,6 +14,8 @@ all: main
 main: main.o
 	$(CC) $(CFLAGS) -o main $(OBJ) $(LFLAGS)
 
+gen: 
+	g++ rand_sym_mat.cpp -o rand_sym_mat
 bsp:
 	cd libs; make clean; make all;
 
