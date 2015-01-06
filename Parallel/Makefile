@@ -4,7 +4,7 @@ CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
 IDIR = libs
 LFLAGS= $(IDIR)/compat-libmcbsp1.2.0.a -lpthread -lm  #-lrt
 
-OBJ= main.o $(IDIR)/{bspedupack.o,io.o,bspmv.o,bspip.o,vec.o}
+OBJ= main.o $(IDIR)/bspedupack.o $(IDIR)/io.o $(IDIR)/bspmv.o $(IDIR)/bspip.o $(IDIR)/vec.o
 
 %.o: %.c
 	$(CC) -I $(IDIR) -c $(CFLAGS) $<
