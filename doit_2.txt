@@ -1,0 +1,65 @@
+#!/bin/bash
+module unload mkl lapack blas
+module unload lapack/gnu lapack/gnu
+src=testdsyev.c
+export lap=LAPACK_PLAIN
+(
+  echo -n "$lap "
+  rm -f a.out
+  gcc -Wall -D$lap $src -llapack_atlas -llapack -lm
+  echo no modules
+  ./a.out
+)
+(
+  echo -n "$lap "
+  module load lapack/gnu blas/gnu
+  rm -f a.out
+  gcc -Wall -D$lap $src -llapack -lblas -lm
+  echo lapack/gnu blas/gnu
+  ./a.out
+  rm -f a.out
+)
+(
+  echo -n "$lap "
+  module load mkl
+  gcc -Wall -D$lap $src -lmkl_gf_lp64 \
+    -lmkl_sequential -lmkl_core -lpthread -lm
+  echo mkl
+  ./a.out
+)
+
+export lap=LAPACKE
+(
+  echo -n "$lap "
+  module load lapack/gnu blas/gnu
+  rm -f a.out
+  gcc -Wall -D$lap $src  -llapacke -llapack  -lblas -lm
+  echo lapack/gnu blas/gnu
+  ./a.out
+)
+(
+  echo -n "$lap "
+  module load lapack/gnu mkl
+  rm -f a.out
+  gcc -Wall -D$lap $src  -llapacke -lmkl_gf_lp64 \
+                         -lmkl_sequential -lmkl_core -lpthread -lm
+  echo lapack/gnu mkl
+  ./a.out
+)
+(
+  echo -n "$lap "
+  module load lapack/intel blas/intel c fortran 
+  rm -f a.out
+  icc -Wall -D$lap $src  -llapacke -llapack  -lblas -lm
+  echo lapack/intel blas/intel c fortran
+  ./a.out
+)
+(
+  echo -n "$lap "
+  module load lapack/intel c fortran mkl
+  rm -f a.out
+  icc -Wall -D$lap $src  -llapacke -lmkl_intel_lp64 \
+                         -lmkl_sequential -lmkl_core -lpthread -lm
+  echo lapack/intel c fortran mkl
+  ./a.out
+)
