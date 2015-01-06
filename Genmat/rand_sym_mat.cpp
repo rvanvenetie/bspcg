@@ -61,6 +61,10 @@ int main(int argc, char *argv[]) {
 	}
 	int n = atoi(argv[1]);
 	double sparsity = atof(argv[2]);
+
+	//Give every combination n and sparsity a different seed, so we have constant matrix per combination
+	srand(n);
+	srand((int) ((double) rand() / sparsity));
   print_mat(rand_mat(n, sparsity));
 
 	return 0;
