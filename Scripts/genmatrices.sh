@@ -1,5 +1,5 @@
 #!/bin/bash
-source options
+source options.sh
 for n in "${narr[@]}"
 do
   for sp in "${sparr[@]}"

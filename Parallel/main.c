@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <string.h>
+#include <libgen.h> 
 #include "io.h"
 #include "vec.h"
 #include "bspmv.h"
@@ -187,7 +188,7 @@ void bspcg() {
     //p s n k init done total mv ip
     if( use_debug) {
       if( s== 0) {
-        printf("mat: %s\np: %d\nn: %d\nk: %d\n", mtx_file, p, mat.n, k);
+        printf("mat: %s\np: %d\nn: %d\nk: %d\n", basename(mtx_file), p, mat.n, k);
       }
       printf(
           "s: %d\n"
@@ -198,7 +199,7 @@ void bspcg() {
           "\ttime_total: %g\n"
           , s, time_init, time_mv, time_ip, time_done, time_total);
     } else {
-      printf("%s\t%d\t%d\t%d\t%d\t%6f\t%6f\t%6f\t%6f\t%6f\n", mtx_file, p, s, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
+      printf("%s\t%d\t%d\t%d\t%d\t%6f\t%6f\t%6f\t%6f\t%6f\n", basename(mtx_file), p, s, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
     }
   }
   bsp_end();
