@@ -63,7 +63,7 @@ with known $A$ and $b$.
 
 In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method. Systems like this are sparse in the sense that a lot of the elements will be zero. This makes it possible to skip parts of the matrix-vector products one encounters.
 
-To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices. \cite{uniflo} We chose to read these matrices in Matrix Market file format\footnote{The reason for this is pure laziness: it is possible to download these matrices in this format and the creators of the Matrix Market supplies a I/O C library.}. \cite{matmar}
+To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices. \cite{uniflo} We chose to read these matrices in Matrix Market file format, allowing us to use various tools in existence. \cite{mondriaan,matmar}
 
 \section{Finite Element Method}
 Given the boundary value problem, 
@@ -123,48 +123,36 @@ Hier moet nog aan toegevoegd worden:
 
 
 \section{CG}
-In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS routines.
+In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS \cite{blas} routines.
 
 \begin{algorithm}
 \caption{Sequential CG}
 \label{alg:seqcg}
 \begin{algorithmic}[1]
-  \Require{$k_{max} \in \N$, $\e \in \R$, $n \in \N$, $A$ symmetric $n \times n$, $b \in \R^n$, $x_0 \in \R^n$}
+  \Require{$k_{max} \in \N$, $\e \in \R$, $n \in \N$, $A$ symmetric $n \times n$, $b \in \R^n$}
   \Ensure{$x \in \R^n$ with $Ax \approx b$}
   \State int $k := 0$;
-  \State float $r[n]$;
-  \State float $\rho$;
-  \State float $\rho_{old}$;
-  \State float $nbsq$;
+  \State float $r[n], u[n] = \vec 0, w[n]$;
+  \State float $\rho, \rho_{old}, nbsq, \alpha, \beta, \gamma$;
   \State
-  \State $x \gets x_0$;
   \State $r \gets b$;
-  \State $r \gets r - Ax$;
   \State $\rho \gets \langle r, r \rangle$;
-  \State $nbsq \gets \langle b, b \rangle$;
+  \State $nbsq \gets \rho$;
   \State
   \While{$\rho > \e^2 \cdot nbsq \wedge k < k_{max}$}
-    \State float $p[n]$;
-    \State float $w[n]$;
-    \State float $\alpha$;
-    \State float $\beta$;
-    \State float $\gamma$;
-    \State
-    \If{$k == 0$}
-      \State $p \gets r$;
-    \Else
+    \If{$k > 0$}
       \State $\beta \gets \rho/\rho_{old}$;
-      \State $p \gets \beta p$;
-      \State $p \gets r + p$;
+      \State $u \gets \beta u$;\label{line:scaleu}
     \EndIf
     \State
-    \State $w \gets Ap$;
-    \State $\gamma \gets \langle p, w\rangle$;
+    \State $u \gets r + u$;\label{line:axpyu}
+    \State $w \gets Au$;\label{line:mvw}
+    \State $\gamma \gets \langle u, w\rangle$;\label{line:ipgamma}
     \State $\alpha \gets \rho/\gamma$;
-    \State $x \gets x + \alpha p$;
-    \State $r \gets r - \alpha w$;
+    \State $x \gets x + \alpha u$;\label{line:axpyx}
+    \State $r \gets r - \alpha w$;\label{line:axpyr}
     \State $\rho_{old} \gets \rho$;
-    \State $\rho \gets \langle r, r \rangle$;
+    \State $\rho \gets \langle r, r \rangle$;\label{line:iprho}
     \State
     \State $k \gets k+1$;
   \EndWhile
@@ -209,9 +197,54 @@ It is therefore of interest to create a condition number that is as low as possi
 A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a smaller condition number than $A$. As the theoretical convergence rate is highly dependent on the condition number, we can improve this using such a preconditioner. Instead of solving $Ax = b$, we will solve $P^{-1}Ax = P^{-1}b$. Blablabla
 
 \section{Parallellizing CG}
+With our sequential algorithm in hand, we are now ready to parallellize the Conjugate gradient method. Given the symmetric positive definite matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
 
-\section{Using sparsity of matrices in parallel CG}
+Every iteration of Algorithm~\ref{alg:seqcg} has 5 vector updates, two inner products and one matrix-vector multiplication. As $nz(A) \gg n$, the matrix-vector multiplication will likely [TODO profiling result] be the most time consuming. Thus, we want to optimize the distribution of $A$. To find the distributions of $A$ and $b$ (and with this, the distributions of all other vectors) we can use Mondriaan.\footnote{Mondriaan is a sequential program written in C that can be used to partition a rectangular sparse matrix, an input vector, and an output vector for parallel sparse matrix-vector multiplication. The program is based on a recursive bipartitioning algorithm that cuts the matrix horizontally and vertically, in a manner resembling some of the famous Mondriaan paintings. The algorithm is multilevel, hypergraph-based, and two-dimensional. It reduces the amount of communication and it spreads both computation and communication evenly over the processors. The program can partition hypergraphs with integer vertex weights and uniform hyperedge costs, but it is primarily intended as a matrix partitioner. \cite{mondriaan}} With its option \texttt{-SquareMatrix\_DistributeVectorsEqual=yes} we can force input and output vector to have the same distribution.
 
+The resulting parallel algorithm is in appearance almost exactly as Algorithm~\ref{alg:seqcg}, so we will not rewrite this. As the vector updates can be done locally without communication, BLAS routines were used (just as in the sequential algorithm). The big changes are made in computation of the inner product and the matrix-vector product. The \texttt{bspmv} algorithm found in \cite[Alg.~4.5]{biss04} and implemented in BSPedupack \cite{bspedupack} was used without alterations, but the \texttt{bspip} algorithm \cite[Alg.~1.1]{biss04} was found unusable as this assumed a cyclical distribution. See Algorithm~\ref{alg:ip} for a parallel inner product algorithm that only assumes that both vectors have the same distribution. The beauty of this algorithm is that no processor has to know the distribution, as long as it has its own vector components stored as a smaller vector.
+
+\begin{algorithm}
+  \caption{Parallel inner product $\langle v, y \rangle$ assuming $v$ and $y$ have equal distributions}
+  \label{alg:ip}
+  \begin{algorithmic}
+    \Require{$p$ total number of processors, $0 \leq s < p$ current processor number, $nv_s$ the amount of vector elements locally stored, $v_s,y_s \in \R^{nv_s}$ local vectors}
+    \Ensure{$\alpha = \langle v, y \rangle$}
+    \State float $\alpha_s = 0$;
+    \State float $\alpha = 0$;
+    \State 
+    \For{$i = 0$ to $nv_s$}\Comment{Compute local inner product}
+      \State $\alpha \gets \alpha + v_s[i] \cdot y_s[i]$;
+    \EndFor
+    \State 
+    \For{$q = 0$ to $p$}\Comment{Put local inner product}
+      \State Put $\alpha_s$ to $P(q)$;
+    \EndFor
+    \State 
+    \For{$q = 0$ to $p$}\Comment{Find global inner product}
+      \State $\alpha \gets \alpha + \alpha_q$;
+    \EndFor
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{BSP cost}
+We first calculate the BSP cost of the parallel algorithm per iteration, using Algorithm~\ref{alg:seqcg} as reference. Let $nv_s$ be the amount of vector elements locally stored on processor $s$. Line~\ref{line:scaleu} costs $nv_s$ operations and lines~\ref{line:axpyu}, \ref{line:axpyx} and \ref{line:axpyr} cost $2nv_s$ each. This makes vector updates contribute $7nv_s$ to the total amount of operations. 
+
+Looking at Algorithm~\ref{alg:ip}, each inner product yields $2nv_s - 1$ operations for Superstep 1, $pg$ operations for Superstep 2 and $p-1$ operations for Superstep 3, with 2 synchronizations in between for a total of $2(2nv_s - 1 + p-1 + pg + 2l)$ inner product operations per iteration.
+
+TODO: uitzoeken of die load imbalance ook voor de vector distributies geldt
+
+TODO MV
+
+\section{Testing our parallel CG}
+To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in the book: create a sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
+
+Only the lower triangular part needs to be computed. If we set some density $\delta$ and loop over each element in this lower triangular part, placing a nonzero 
+
+\subsection{Profiling}
+\subsection{Scaling tests}
+With these matrices in hand, we can perform scaling tests by varying $p$, $n$ and $\delta$.
+
+\section{Creating FEM matrices}
 \section{hoe heette het ook alweer als je na een kleine verandering in je matrix opnieuw ging optimizen}
 
 \section{Future work}
