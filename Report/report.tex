@@ -236,10 +236,21 @@ TODO: uitzoeken of die load imbalance ook voor de vector distributies geldt
 TODO MV
 
 \section{Testing our parallel CG}
-To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in the book: create a sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
+To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in the book: create a random sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
 
-Only the lower triangular part needs to be computed. If we set some density $\delta$ and loop over each element in this lower triangular part, placing a nonzero 
+We need to compute a \emph{symmetric} matrix, so we only have to look at the lower triangular part of this matrix. First we create a 
+random sparse strict lower triangular\footnote{Only elements under the main diagonal are set} matrix B. We do this by specifying some
+density $\delta$ and placing a random number in $[-1,1]$ on position $(i,j)$ which chance $\delta$. The matrix
+must be positive definite, which is achieved if
+\[
+|A_{ii}| > \sum_{j=1, j\ne i}^n |A_{ij}|= \sum_{j=1}^{i-1} |B_{ij}| + |B_{ji}|.
+\]
+While placing the non-zeros in the lower triangular part of $B$, we therefore iteratively store the sum in the right hand side of this equation for the
+corresponding diagonal element. Let $\mu$ be the maximum of these sums, we now know that $B + B^t + uI$ is a symmetric
+positive definite matrix. Finally, to add some more randomness to the diagonal, we replace the diagonal element $u$ by a random number in $[\mu, \mu + 2]$ on with chance $\delta$.
 
+This parameter $\delta$ gives is an indication for how the `sparness' of the matrix. With this method we can generate a variety of matrices
+for different combinations of $n$ and $\delta$, which gives insight in the performance of our parallel implementation.
 \subsection{Profiling}
 \subsection{Scaling tests}
 With these matrices in hand, we can perform scaling tests by varying $p$, $n$ and $\delta$.
