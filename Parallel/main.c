@@ -199,7 +199,7 @@ void bspcg() {
           "\ttime_total: %g\n"
           , s, time_init, time_mv, time_ip, time_done, time_total);
     } else {
-      printf("%s\t%d\t%d\t%d\t%d\t%6f\t%6f\t%6f\t%6f\t%6f\n", basename(mtx_file), p, s, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
+			if (s== 0) printf("%s\t%d\t%d\t%d\t%6f\t%6f\t%6f\t%6f\t%6f\n", basename(mtx_file), p, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
     }
   }
   bsp_end();
@@ -210,28 +210,27 @@ void bspcg() {
 int main(int argc, char *argv[]) {
   bsp_init(bspcg,argc, argv); //Execute after we start with initalization
 
-  //Handle arguments
-  if( argc == 6) {
-    mtx_file = argv[1];
-    load_b = (int) strtol( argv[2], (char **)NULL, 10);
-    P = (int) strtol( argv[3], (char **)NULL, 10);
-    kmax = (int) strtol( argv[4], (char **)NULL, 10);
-    eps = atof( argv[5]);
-    use_time = 1;
-    use_debug = 1;
-  } else if( argc == 8) {
-    mtx_file = argv[1];
-    load_b = (int) strtol( argv[2], (char **)NULL, 10);
-    P = (int) strtol( argv[3], (char **)NULL, 10);
-    kmax = (int) strtol( argv[4], (char **)NULL, 10);
-    eps = atof( argv[5]);
-    use_time = (int) strtol( argv[6], (char **)NULL, 10);
-    use_debug = (int) strtol( argv[7], (char **)NULL, 10);
-  } else {
-    printf("Sorry, no workie. Usage: %s mtx_file load_b P kmax eps [use_time use_debug]\n", argv[0]);
-    exit(1);
-  }
-
+	use_time  = 1;
+	use_debug = 1;
+	load_b =    0;
+	kmax  =     10000;
+	eps   =     0.01;
+	if(!(argc == 3 || argc == 6 || argc == 8))
+	{
+    printf("Sorry, no workie. Usage: %s P mtx_file [load_b kmax eps [use_time use_debug]]\n", argv[0]);
+		exit(1);
+	}
+	P =        atoi(argv[1]);
+	mtx_file = argv[2];
+	if (argc > 3) {
+		load_b = atoi(argv[3]);
+		kmax =   atoi(argv[4]);
+		eps  =   atof(argv[5]);
+	}
+	if (argc == 8) {
+		use_time =  atoi(argv[6]);
+		use_debug = atoi(argv[7]);
+	}
   if (P > bsp_nprocs()){
     printf("Sorry, not enough processors available.\n");
     exit(1);
