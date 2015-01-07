@@ -217,7 +217,7 @@ int main(int argc, char *argv[]) {
 	eps   =     0.01;
 	if(!(argc == 3 || argc == 6 || argc == 8))
 	{
-    printf("Sorry, no workie. Usage: %s P mtx_file [load_b kmax eps [use_time use_debug]]\n", argv[0]);
+    fprintf( stderr, "Sorry, no workie. Usage: %s P mtx_file [load_b kmax eps [use_time use_debug]]\n", argv[0]);
 		exit(1);
 	}
 	P =        atoi(argv[1]);
@@ -232,7 +232,7 @@ int main(int argc, char *argv[]) {
 		use_debug = atoi(argv[7]);
 	}
   if (P > bsp_nprocs()){
-    printf("Sorry, not enough processors available.\n");
+    fprintf( stderr, "Sorry, not enough processors available.\n");
     exit(1);
   }
   bspcg();

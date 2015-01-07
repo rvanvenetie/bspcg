@@ -67,6 +67,10 @@ ja[k] is the global column index.
     char linebuf[1024];
     /* Open the matrix file and read the header */
     fp=fopen(filename,"r");
+    if( fp == NULL) {
+      fprintf( stderr, "file not found: %s\n", filename);
+      exit(1);
+    }
 
     fgets( linebuf, 1024, fp);
     /*
