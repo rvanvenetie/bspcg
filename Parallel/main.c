@@ -143,7 +143,7 @@ void bspcg() {
   //Calculate w = Ax
   //Print timing and resulting vector w/b 
 
-  if( 0) {
+  if( 1) {
     /*
      * We now give processor zero the solution vector.
      * Note that we probably do not want to do this in the real
