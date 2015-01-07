@@ -1,8 +1,17 @@
-CC = gcc
+UNAME := $(shell whoami)
 WARNING_FLAGS=-Wall -Wextra -Werror-implicit-function-declaration -Wshadow -Wstrict-prototypes -pedantic
 CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
 IDIR = libs
-LFLAGS= $(IDIR)/compat-libmcbsp1.2.0.a -lpthread -lm  #-lrt
+LFLAGS=  -lpthread -lm  #-lrt
+
+ifeq ($(UNAME),bissstud)
+	CC = mpiicc
+	LFLAGS += -lbsponmpi
+else
+	CC = gcc
+	LFLAGS += $(IDIR)/compat-libmcbsp1.2.0.a 
+endif
+
 
 OBJ= main.o $(IDIR)/bspedupack.o $(IDIR)/io.o $(IDIR)/bspmv.o $(IDIR)/bspip.o $(IDIR)/vec.o
 
@@ -17,8 +26,9 @@ main: main.o
 gen: 
 	g++ rand_sym_mat.cpp -o rand_sym_mat
 bsp:
-	cd libs; make clean; make all;
+	cd libs; make all;
 
 clean:
 	rm -f *.o
 	rm -f main
+	cd libs; make clean;
