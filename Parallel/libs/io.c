@@ -400,12 +400,11 @@ the local index i, 0 <= i < nv.
   int nloc(int p, int s, int n);
 
   int n, n2, pv, pv2, q, np, b, i, k, globk, proc, ind, nv,
-      *tmpproc, *tmpind, *Nv, *vindex, get_vals = 0;
+      *tmpproc, *tmpind, *Nv, *vindex;
   double val;
   double *tmpval, *vval;
   FILE *disfp, *valfp;
 
-  if( valfile != NULL) get_vals = 1;
 
   /* Initialise fp and Nv */
   disfp = NULL;
@@ -420,10 +419,10 @@ the local index i, 0 <= i < nv.
     /* Open the file and read the header */
 
     disfp=fopen(disfile,"r");
-    if( get_vals) valfp=fopen(valfile,"r");
+    if( valfile) valfp=fopen(valfile,"r");
     fscanf(disfp,"%d %d\n", &n, &pv);
-    if( get_vals) fscanf(valfp,"%d\n", &n2);
-    if( get_vals) assert( n == n2);
+    if( valfile) fscanf(valfp,"%d\n", &n2);
+    if( valfile) assert( n == n2);
     if(pv!=p)
       bsp_abort("Error: p not equal to p(vec)\n"); 
     for (q=0; q<p; q++)
@@ -437,10 +436,10 @@ the local index i, 0 <= i < nv.
   np= nloc(p,s,n);
   tmpproc= vecalloci(np);
   tmpind= vecalloci(np);
-  if( get_vals) tmpval = vecallocd( np);
+  if( valfile) tmpval = vecallocd( np);
   bsp_push_reg(tmpproc,np*SZINT);
   bsp_push_reg(tmpind,np*SZINT);
-  if( get_vals) bsp_push_reg(tmpval,np*SZDBL);
+  if( valfile) bsp_push_reg(tmpval,np*SZDBL);
   bsp_sync();
 
   if (s==0){
@@ -460,7 +459,7 @@ the local index i, 0 <= i < nv.
          at a time to save memory  */
       for(k=q*b; k<(q+1)*b && k<n; k++){
         fscanf(disfp,"%d %d\n", &i, &proc);
-        if( get_vals) fscanf(valfp,"%d %lg\n", &i, &val);
+        if( valfile) fscanf(valfp,"%d %lg\n", &i, &val);
         /* Convert index and processor number to ranges
            0..n-1 and 0..p-1, assuming they were
            1..n and 1..p */
@@ -471,7 +470,7 @@ the local index i, 0 <= i < nv.
           bsp_abort("Error: i not equal to index \n");
         bsp_put(i%p,&proc,tmpproc,(i/p)*SZINT,SZINT);
         bsp_put(i%p,&ind,tmpind,(i/p)*SZINT,SZINT);
-        if( get_vals) bsp_put(i%p,&val,tmpval,(i/p)*SZDBL,SZDBL);
+        if( valfile) bsp_put(i%p,&val,tmpval,(i/p)*SZDBL,SZDBL);
         Nv[proc]++;
       }
     }
@@ -487,37 +486,37 @@ the local index i, 0 <= i < nv.
 
   /* Store the components at their final destination */
   vindex= vecalloci(nv);  
-  if( get_vals) vval= vecallocd(nv);  
+  if( valfile) vval= vecallocd(nv);  
   bsp_push_reg(vindex,nv*SZINT);
-  if( get_vals) bsp_push_reg(vval,nv*SZDBL);
+  if( valfile) bsp_push_reg(vval,nv*SZDBL);
   bsp_sync();
 
   for(k=0; k<np; k++){
     globk= k*p+s;
     bsp_put(tmpproc[k],&globk,vindex,tmpind[k]*SZINT,SZINT);
-    if( get_vals) bsp_put(tmpproc[k],&tmpval[k],vval,tmpind[k]*SZDBL,SZDBL);
+    if( valfile) bsp_put(tmpproc[k],&tmpval[k],vval,tmpind[k]*SZDBL,SZDBL);
   }
   bsp_sync();
 
   bsp_pop_reg(vindex);
-  if( get_vals) bsp_pop_reg(vval);
+  if( valfile) bsp_pop_reg(vval);
   bsp_pop_reg(tmpind);
   bsp_pop_reg(tmpproc);
-  if( get_vals) bsp_pop_reg(tmpval);
+  if( valfile) bsp_pop_reg(tmpval);
   bsp_pop_reg(&nv);
   bsp_pop_reg(&n);
   vecfreei(tmpind);
   vecfreei(tmpproc);
-  if( get_vals) vecfreed(tmpval);
+  if( valfile) vecfreed(tmpval);
 
   *pn= n;
   *pnv= nv;
   *pvindex= vindex;
-  if( get_vals) *pvval = vval;
+  if( valfile) *pvval = vval;
 
   if( s == 0) {
     fclose( disfp);
-    if( get_vals) fclose( valfp);
+    if( valfile) fclose( valfp);
   }
 
 } /* end bspinputvec */
