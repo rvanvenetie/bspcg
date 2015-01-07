@@ -1,2 +1,2 @@
 all:
-	g++ rand_sym_mat.cpp -o rand_sym_mat
+	g++ rand_sym_mat.cpp -g -o rand_sym_mat
