@@ -28,8 +28,8 @@ mat rand_mat( int n,double sparsity) {
 				result.j.push_back(j);
 				double new_val = 2*rand_double() -1;
 				result.val.push_back(new_val);
-				diag[i] += abs(new_val);
-				diag[j] += abs(new_val);
+				diag[i-1] += abs(new_val);
+				diag[j-1] += abs(new_val);
 			}
 	double max = *max_element(diag.begin(), diag.end());
 	//Loop over diagonal
