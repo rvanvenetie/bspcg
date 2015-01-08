@@ -9,12 +9,17 @@
 #include "bspmv.h"
 #include "bspip.h"
 #include "bspedupack.h"
+
+#define B_ONES 0
+#define B_LOAD 1
+#define B_AX 2
+#define B_RAND 3
 /* Below we have set the default values for the parameters of this program */
 
 /* These variables may be acces by any processor */
 int kmax		 = 10000;
-int load_b	 = 0;
-double eps	 = 0.01;
+int b_mode	 = 0;
+double eps	 = 1E-8;
 int use_debug= 1;
 int use_time = 1;
 /* These variables may only be acces by s = 0 */
@@ -50,7 +55,7 @@ void bspcg() {
 	/* Communicate the parameters of this program */
 
 	//Push variable names
-	bsp_push_reg(&load_b,			SZINT);
+	bsp_push_reg(&b_mode,			SZINT);
 	bsp_push_reg(&kmax,				SZINT);
 	bsp_push_reg(&eps,				SZDBL);
 	bsp_push_reg(&use_debug,  SZINT);
@@ -58,7 +63,7 @@ void bspcg() {
 	bsp_sync();
 
 	//Read values from s = 0
-	bsp_get(0, &load_b, 0, &load_b, SZINT);
+	bsp_get(0, &b_mode, 0, &b_mode, SZINT);
 	bsp_get(0, &kmax  , 0, &kmax  , SZINT);
 	bsp_get(0, &eps   , 0, &eps   , SZDBL);
 
@@ -66,7 +71,7 @@ void bspcg() {
 	bsp_get(0, &use_time , 0, &use_time , SZINT);
 	bsp_sync();
 
-	bsp_pop_reg(&load_b);
+	bsp_pop_reg(&b_mode);
 	bsp_pop_reg(&kmax);
 	bsp_pop_reg(&eps);
 	bsp_pop_reg(&use_debug);
@@ -101,17 +106,25 @@ void bspcg() {
              dis.nv, dis.nv, mat.rowindex, mat.colindex,
 	     dis.vindex, dis.vindex, 
 	     srcprocv, srcindv, destprocu, destindu);
-	if (!load_b) { //Not loaded from file, initialize as a vector of ones
-    double *x_temp;
+	if (b_mode != B_LOAD) { //Not loaded from file, initialize as a vector of ones
 		//Initialize b to be a vector of ones
     b = vecallocd(dis.nv);
-    x_temp = vecallocd(dis.nv);
-    for( int i = 0; i < dis.nv; i++) 
-      x_temp[i] = 1;
-    bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
-					mat.val, mat.inc,
-					srcprocv, srcindv, destprocu, destindu,
-					dis.nv, dis.nv, x_temp, b);
+    if( b_mode == B_AX) {
+      double *x_temp = vecallocd(dis.nv);
+      for( int i = 0; i < dis.nv; i++) 
+        x_temp[i] = 1;
+      bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
+            mat.val, mat.inc,
+            srcprocv, srcindv, destprocu, destindu,
+            dis.nv, dis.nv, x_temp, b);
+      vecfreed( x_temp);
+    } else if( b_mode == B_ONES) {
+      for( int i = 0; i < dis.nv; i++) 
+        b[i] = 1;
+    } else if( b_mode == B_RAND) {
+      for( int i = 0; i < dis.nv; i++) 
+        b[i] = ((double)rand())/RAND_MAX;
+    }
   }
 
   int k = 0; //Iterations
@@ -230,7 +243,7 @@ void bspcg() {
 
 	if (use_debug) {
 		if (s == 0)
-			printf("mat: %s\np: %d\nn: %d\nk: %d\n", basename(matbuffer), p, mat.n, k);
+			printf("mat: %s\np: %d\nn: %d\nb_mode: %d\nk: %d\n", basename(matbuffer), p, mat.n, b_mode, k);
 		printf( "s: %d\n"
 						"\ttime_init: %g\n"
 						"\ttime_mv: %g\n"
@@ -240,8 +253,8 @@ void bspcg() {
 							, s, time_init, time_mv, time_ip, time_done, time_total);
 	} else if (s == 0 && use_time) {
     //p s n k init done total mv ip
-		printf("%s\t%d\t%d\t%d\t%6f\t%6f\t%6f\t%6f\t%6f\n",
-				basename(matbuffer), p, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
+		printf("%s\t%d\t%d\t%d\t%d\t%6f\t%6f\t%6f\t%6f\t%6f\n",
+				basename(matbuffer), p, b_mode, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
   }
 
   bsp_end();
@@ -254,15 +267,15 @@ int main(int argc, char *argv[]) {
 	if(!(argc == 2 || argc == 3 || argc == 6 || argc == 8))
 	{
 		fprintf(stderr, "Invalid arguments given\n"
-				            "\tUsage: %s mtx_file [P [load_b kmax eps [use_time use_debug]]]\n"
+				            "\tUsage: %s mtx_file [P [b_mode kmax eps [use_time use_debug]]]\n"
 										"\tDefault parameters:\n"
 										"\t\tP=%d\n"
-										"\t\tload_b=%d\n"
+										"\t\tb_mode=%d\n"
 										"\t\tkmax=%d\n"
 										"\t\teps=%g\n"
 										"\t\tuse_time=%d\n"
 										"\t\tise_debug=%d\n",
-										argv[0],P,load_b, kmax, eps, use_time, use_debug);
+										argv[0],P,b_mode, kmax, eps, use_time, use_debug);
 		exit(1);
 	}
 	if (argc > 2) {
@@ -273,7 +286,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	if (argc > 3) {
-		load_b = atoi(argv[3]);
+		b_mode = atoi(argv[3]);
 		kmax =   atoi(argv[4]);
 		eps  =   atof(argv[5]);
 	}
@@ -288,7 +301,7 @@ int main(int argc, char *argv[]) {
 	vecdisbuffer=  malloc(BUFERSTRSIZE);
 	snprintf( matbuffer,    1024, "%s-P%d", argv[1], P);
 	snprintf( vecdisbuffer, 1024, "%s-u%d", argv[1], P);
-	if (load_b) {
+	if (b_mode == B_LOAD) {
 		vecvalbuffer=  malloc(BUFERSTRSIZE);
 		snprintf( vecvalbuffer, 1024, "%s-b"  , argv[1]);
 	}
