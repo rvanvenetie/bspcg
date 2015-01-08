@@ -258,10 +258,10 @@ void bspcg() {
 		double time_it_local = time_iter - (time_mv + time_ip);
 		double density = mat.nzA / ((double) mat.n * mat.n);
 		if (use_debug)
-			printf("mat_name, p,      mat_n,  mat_nzA, density,  time_init, time_iter, time_glob, time_it_local, time_mv, time_ip\n");
-		//mat_name, p,      mat_n,  mat_nzA, density,  time_init, time_iter, time_glob, time_it_local, time_mv, time_ip
-		printf("%s" "\t%d" "\t%d" "\t%d"    "\t%6f"		"\t%6f"		 "\t%6f" 		"\t%6f"		"\t%6f"					"\t%6f"   "\t%6f\n",
-				basename(matbuffer), p, mat.n, mat.nzA,density,time_init,time_iter,time_glob,time_it_local,time_mv,time_ip);
+			printf("mat_name, p,      mat_n,  mat_nzA, density, k, time_init, time_iter, time_glob,time_total,  time_it_local, time_mv, time_ip\n");
+		//mat_name, p,      mat_n,  mat_nzA, density, k,  time_init, time_iter, time_glob, time_total time_it_local, time_mv, time_ip
+		printf("%s" "\t%d" "\t%d" "\t%d"    "\t%6f"	"\t%d"	"\t%6f"		 "\t%6f" 		"\t%6f"	 "\t%6f"		"\t%6f"					"\t%6f"   "\t%6f\n",
+				basename(matbuffer), p, mat.n, mat.nzA,density,k,time_init,time_iter,time_glob,time_total, time_it_local,time_mv,time_ip);
   }
 
   bsp_end();
