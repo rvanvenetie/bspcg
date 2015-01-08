@@ -253,7 +253,7 @@ void bspcg() {
 							, s, time_init, time_mv, time_ip, time_done, time_total);
 	} else if (s == 0 && use_time) {
     //p s n k init done total mv ip
-		printf("%s\t%d\t%d\t%d\t%d\t%6f\t%6f\t%6f\t%6f\t%6f\n",
+		printf("%s" "\t%d" "\t%d" "\t%d" "\t%d" "\t%6f" "\t%6f" "\t%6f" "\t%6f" "\t%6f\n",
 				basename(matbuffer), p, b_mode, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
   }
 
