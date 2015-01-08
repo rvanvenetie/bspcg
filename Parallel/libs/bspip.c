@@ -47,6 +47,7 @@ double bspip_dist(int p, int s,  //Processor information
   //Free data stuff
   bsp_pop_reg(inprod);
   vecfreed(inprod);
+	bsp_sync();
 
   return inprod_local;
 } 

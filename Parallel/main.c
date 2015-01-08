@@ -244,7 +244,7 @@ void bspcg() {
 
 int main(int argc, char *argv[]) {
   bsp_init(bspcg,argc, argv); //Execute after we start with initalization
-	fprintf(stderr, "%d\n", bsp_nprocs());
+	P = bsp_nprocs();
 	if(!(argc == 2 || argc == 3 || argc == 6 || argc == 8))
 	{
 		fprintf(stderr, "Invalid arguments given\n"
