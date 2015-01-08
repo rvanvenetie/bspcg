@@ -75,12 +75,6 @@ void bspcg() {
   /* Read matrix/vector distribution&values from file */
   mat = load_symm_distributed_matrix_from_file( matbuffer, p, s);
 	dis = load_vector_distribution_from_file( vecdisbuffer, vecvalbuffer, p, s, &b);
-	if (!load_b) { //Not loaded from file, initialize as a vector of ones
-		//Initialize b to be a vector of ones
-    b = vecallocd(dis.nv);
-    for( int i = 0; i < dis.nv; i++) 
-      b[i] = 1;
-  }
 
 	if (use_debug) {
       printf( "s/p: %d/%d\n"
@@ -107,6 +101,18 @@ void bspcg() {
              dis.nv, dis.nv, mat.rowindex, mat.colindex,
 	     dis.vindex, dis.vindex, 
 	     srcprocv, srcindv, destprocu, destindu);
+	if (!load_b) { //Not loaded from file, initialize as a vector of ones
+    double *x_temp;
+		//Initialize b to be a vector of ones
+    b = vecallocd(dis.nv);
+    x_temp = vecallocd(dis.nv);
+    for( int i = 0; i < dis.nv; i++) 
+      x_temp[i] = 1;
+    bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
+					mat.val, mat.inc,
+					srcprocv, srcindv, destprocu, destindu,
+					dis.nv, dis.nv, x_temp, b);
+  }
 
   int k = 0; //Iterations
   //Allocate vectors used in algorithm, b is already allocated
