@@ -1,5 +1,5 @@
 typedef struct {
-  int n, nz;
+  int n, nz, nzA;
   int *inc;
   int nrows, ncols, *rowindex, *colindex;
   double *val;

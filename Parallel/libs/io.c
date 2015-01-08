@@ -13,7 +13,7 @@ typedef struct {int i,j;} indexpair;
 
 int P;
 
-void bspinput2triple(const char*filename, int p, int s, int *pnA, int *pnz, 
+void bspinput2triple(const char*filename, int p, int s, int *pnA, int *pnz, int *nzA,
     int **pia, int **pja, double **pa) {
 
   /* This function reads a sparse matrix in distributed
@@ -50,7 +50,7 @@ ia[k] is the global row index of the  k'th local nonzero.
 ja[k] is the global column index.
 */
 
-  int pA, mA, nA, nzA, nz, q, nzq, k, status, *Pstart, *ia, *ja;
+  int pA, mA, nA, nz, q, nzq, k, status, *Pstart, *ia, *ja;
   int tagsz;
   double value, *a;
   indexpair t;
@@ -59,6 +59,7 @@ ja[k] is the global column index.
   Pstart= vecalloci(p+1);
   bsp_push_reg(&nA,SZINT);
   bsp_push_reg(&nz,SZINT);
+	bsp_push_reg(nzA, SZINT);
   tagsz= sizeof(indexpair);
   bsp_set_tagsize(&tagsz);
   bsp_sync();
@@ -84,7 +85,7 @@ ja[k] is the global column index.
     while( strstr( fgets( linebuf, 1024, fp), "%") != NULL);
 
     //read this first line after comment block
-    if( sscanf(linebuf,"%d %d %d %d", &mA, &nA, &nzA, &pA) != 4) {
+    if( sscanf(linebuf,"%d %d %d %d", &mA, &nA, nzA, &pA) != 4) {
       printf("Cannot read matrix file!\n");
       exit(1);
     }
@@ -97,6 +98,7 @@ ja[k] is the global column index.
     for (q=0; q<=p; q++)
       fscanf(fp,"%d\n", &Pstart[q]);
     for (q=0; q<p; q++){
+			bsp_put(q,nzA,nzA,0,SZINT);
       bsp_put(q,&nA,&nA,0,SZINT);
       nzq= Pstart[q+1]-Pstart[q];
       bsp_put(q,&nzq,&nz,0,SZINT);
@@ -522,15 +524,15 @@ the local index i, 0 <= i < nv.
 } /* end bspinputvec */
 
 distributed_matrix load_symm_distributed_matrix_from_file( const char *filename, const int p, const int s) {
-  int pn, pnz, *pI, *pJ, pnrows, pncols, *prowindex, *pcolindex;
+  int pn, pnz, *pI, *pJ, nzA, pnrows, pncols, *prowindex, *pcolindex;
   double *pval;
 
-  bspinput2triple( filename, p, s, &pn, &pnz, &pI, &pJ, &pval);
+  bspinput2triple( filename, p, s, &pn, &pnz, &nzA, &pI, &pJ, &pval);
   triple2icrs( pn, pnz, pI, pJ, pval, &pnrows, &pncols, &prowindex, &pcolindex);
   vecfreei(pJ);
 
   distributed_matrix mat = {
-    .n = pn, .nz = pnz, 
+    .n = pn, .nz = pnz,  .nzA = nzA,
     .inc = pI,
     .nrows = pnrows, .ncols = pncols, 
     .rowindex = prowindex, .colindex = pcolindex,

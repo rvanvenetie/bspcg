@@ -18,7 +18,7 @@
 
 /* These variables may be acces by any processor */
 int kmax		 = 10000;
-int b_mode	 = 0;
+int b_mode	 = B_ONES;
 double eps	 = 1E-8;
 int use_debug= 1;
 int use_time = 1;
@@ -251,10 +251,17 @@ void bspcg() {
 						"\ttime_done: %g\n"
 						"\ttime_total: %g\n"
 							, s, time_init, time_mv, time_ip, time_done, time_total);
-	} else if (s == 0 && use_time) {
-    //p s n k init done total mv ip
-		printf("%s" "\t%d" "\t%d" "\t%d" "\t%d" "\t%6f" "\t%6f" "\t%6f" "\t%6f" "\t%6f\n",
-				basename(matbuffer), p, b_mode, mat.n, k, time_init, time_mv, time_ip, time_done, time_total);
+	}
+	if (s == 0 && use_time) {
+		double time_iter = time_done - time_init;
+		double time_glob = time_total - time_done;
+		double time_it_local = time_iter - (time_mv + time_ip);
+		double density = mat.nzA / ((double) mat.n * mat.n);
+		if (use_debug)
+			printf("mat_name, p,      mat_n,  mat_nzA, density,  time_init, time_iter, time_glob, time_it_local, time_mv, time_ip\n");
+		//mat_name, p,      mat_n,  mat_nzA, density,  time_init, time_iter, time_glob, time_it_local, time_mv, time_ip
+		printf("%s" "\t%d" "\t%d" "\t%d"    "\t%6f"		"\t%6f"		 "\t%6f" 		"\t%6f"		"\t%6f"					"\t%6f"   "\t%6f\n",
+				basename(matbuffer), p, mat.n, mat.nzA,density,time_init,time_iter,time_glob,time_it_local,time_mv,time_ip);
   }
 
   bsp_end();
