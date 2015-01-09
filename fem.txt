@@ -1,0 +1,22 @@
+Wat willen we doen met FEM:
+- FEM systemen oplossen ipv random systemen
+  - jans programma FEM systemen laten maken
+
+motivatie: mondriaan is de duurste stap, en we weten meer over onze inputmatrix
+- fix mondriaan timings
+
+- preconditioning. is dit mogelijk met mondriaan?
+- diagonaal preconditioner is simpel -- zelfde distributie als de vectoren
+- incomplete cholesky is een voorbeeld van een precond die goed zou kunnen werken, want hij past er precies op, maar heeft hetzelfde sparsity pattern als A behalve dat hij lower triangular is, dus veel processoren doen niks. future work
+Stappenplan:
+- creeer FEM systeem (initial triangulation) bij een domain
+- run Mondriaan
+- repeat:
+  - solve system met para sparse CG
+  - use magic (a posteriori error estimator) to find a triangle to subdivide
+  - generate NEW system -> deze is op een paar plekken maar anders dan het oude systeem
+  - NIET mondriaan gebruiken maar onze eigen SuperSmartSystemPartitioner(TM) op basis van het oude en het nieuwe systeem en vind een partitie
+
+Alternatief:
+gegeven een FEM systeem (triangulatie en matrix en rhs), vind SNEL een GOEDE partitie
+

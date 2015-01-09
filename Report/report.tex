@@ -184,7 +184,7 @@ Our storage format uses the so-called coordinate scheme; we store tuples $(i, j,
 \end{algorithm}
 
 \subsection{Preconditioned CG}
-The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Slide 23]{sleij}:
+The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
 \[
   \frac{\|x - x_k\|_A}{\|x - x_0\|_A} \leq 2 \left( \frac{ \sqrt{\kappa_2(A)}-1}{\sqrt{\kappa_2(A)}+1}\right)^k \leq 2 \exp \left( -\frac{2k}{\sqrt{\kappa_2(A)}}\right) 
 \]
@@ -194,14 +194,56 @@ where $\kappa_2(A)$ is the $2$-condition number of $A$, which for symmetric posi
 \]
 It is therefore of interest to create a condition number that is as low as possible.
 
-A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a smaller condition number than $A$. As the theoretical convergence rate is highly dependent on the condition number, we can improve this using such a preconditioner. Instead of solving $Ax = b$, we will solve $P^{-1}Ax = P^{-1}b$. Blablabla
+A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a smaller condition number than $A$. As the theoretical convergence rate is highly dependent on the condition number, we can improve this using such a preconditioner. Instead of solving $Ax = b$, we will solve $P^{-1}Ax = P^{-1}b$. This preconditioner should satisy:
+\begin{itemize}
+  \item Convergence time should be faster for the preconditioned system. Normally, this means that $P$ is constructed as an ``easily invertible'' approximation to $A$;
+  \item Operations with $P^{-1}$ should be easy to perform;
+  \item $P$ should be (relatively) easy to construct.
+\end{itemize}
+
+TODO uitleggen wat implicit preconditioning precies inhoudt
+
+Algorithm~\ref{alg:pcg} shows CG with implicit preconditioning. \cite[Lect.~10]{sleij}
+\begin{algorithm}
+  \caption{CG with implicit preconditioning \cite[Lect.~10]{sleij}}
+  \label{alg:pcg}
+  \begin{algorithmic}
+    \State $\rho \gets 1$;
+    \While{asdf}
+      \State $c \gets P^{-1} r$; \Comment{Solve $Pc = r$ for c}
+      \State $\rho_{old} \gets \rho$;
+      \State $\rho \gets \langle c, r \rangle$;
+      \State
+      \If{$k > 0$}
+        \State $\beta \gets \rho/\rho_{old}$;
+        \State $u \gets \beta u$;
+      \EndIf
+      \State
+      \State $u \gets c + u$;
+      \State $w \gets Au$;
+      \State $\gamma \gets \langle u, w \rangle$;
+      \State $\alpha \gets \rho/\gamma$;
+      \State $r \gets r - \alpha w$;
+      \State $x \gets x + \alpha u$;
+    \EndWhile
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{Choice of preconditioner}
+If $A$ is positive definite, the diagonal tells us a lot about the properties of $A$ so it makes a certain amount of sense to consider perhaps the simplest preconditioner of all:
+\[
+  P = \text{diag}(a_{11}, \ldots, a_{nn}).
+\]
+The beauty of this preconditioner is the fact that its sparsity pattern is just like a dense vector. We will use this fact to implement a sparse parallel CG with (rudimentary) preconditioning.
+
+A more advanced preconditioner that is often used in the symmetric positive definite case is Incomplete Cholesky.  The Cholesky factorization of a positive definite matrix $A$ is $A = LL^*$ with $L$ a lower triangular matrix. An incomplete Cholesky factorization is any sparse lower triangular $K$ that is in some sense close to $L$. One such $K$ can be found by finding the exact Cholesky decomposition, except that any entry is set to zero if the corresponding entry in $A$ is also zero. \cite[\S11.5.8]{golub}
 
 \section{Parallellizing CG}
 With our sequential algorithm in hand, we are now ready to parallellize the Conjugate gradient method. Given the symmetric positive definite matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
 
 Every iteration of Algorithm~\ref{alg:seqcg} has 5 vector updates, two inner products and one matrix-vector multiplication. As $nz(A) \gg n$, the matrix-vector multiplication will likely [TODO profiling result] be the most time consuming. Thus, we want to optimize the distribution of $A$. To find the distributions of $A$ and $b$ (and with this, the distributions of all other vectors) we can use Mondriaan.\footnote{Mondriaan is a sequential program written in C that can be used to partition a rectangular sparse matrix, an input vector, and an output vector for parallel sparse matrix-vector multiplication. The program is based on a recursive bipartitioning algorithm that cuts the matrix horizontally and vertically, in a manner resembling some of the famous Mondriaan paintings. The algorithm is multilevel, hypergraph-based, and two-dimensional. It reduces the amount of communication and it spreads both computation and communication evenly over the processors. The program can partition hypergraphs with integer vertex weights and uniform hyperedge costs, but it is primarily intended as a matrix partitioner. \cite{mondriaan}} With its option \texttt{-SquareMatrix\_DistributeVectorsEqual=yes} we can force input and output vector to have the same distribution.
 
-The resulting parallel algorithm is in appearance almost exactly as Algorithm~\ref{alg:seqcg}, so we will not rewrite this. As the vector updates can be done locally without communication, BLAS routines were used (just as in the sequential algorithm). The big changes are made in computation of the inner product and the matrix-vector product. The \texttt{bspmv} algorithm found in \cite[Alg.~4.5]{biss04} and implemented in BSPedupack \cite{bspedupack} was used without alterations, but the \texttt{bspip} algorithm \cite[Alg.~1.1]{biss04} was found unusable as this assumed a cyclical distribution. See Algorithm~\ref{alg:ip} for a parallel inner product algorithm that only assumes that both vectors have the same distribution. The beauty of this algorithm is that no processor has to know the distribution, as long as it has its own vector components stored as a smaller vector.
+The resulting parallel algorithm is in appearance almost exactly as Algorithm~\ref{alg:seqcg}, so we will not rewrite this. As the vector updates can be done locally without communication, BLAS routines were used (just as in the sequential algorithm). The big changes are made in computation of the inner product and the matrix-vector product. The \texttt{bspmv} algorithm found in \cite[Alg.~4.5]{biss04} was used without alterations, but the \texttt{bspip} algorithm \cite[Alg.~1.1]{biss04} was found unusable as this assumed a cyclical distribution. See Algorithm~\ref{alg:ip} for a parallel inner product algorithm that only assumes that both vectors have the same distribution. The beauty of this algorithm is that no processor has to know the distribution, as long as it has its own vector components stored as a smaller vector.
 
 \begin{algorithm}
   \caption{Parallel inner product $\langle v, y \rangle$ assuming $v$ and $y$ have equal distributions}
@@ -235,25 +277,72 @@ TODO: uitzoeken of die load imbalance ook voor de vector distributies geldt
 
 TODO MV
 
+\subsection{Parallel CG with diagonal preconditioner}
+blabla
+
 \section{Testing our parallel CG}
 To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in the book: create a random sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
 
 We need to compute a \emph{symmetric} matrix, so we only have to look at the lower triangular part of this matrix. First we create a 
-random sparse strict lower triangular\footnote{Only elements under the main diagonal are set} matrix B. We do this by specifying some
-density $\delta$ and placing a random number in $[-1,1]$ on position $(i,j)$ which chance $\delta$. The matrix
-must be positive definite, which is achieved if
+random sparse strictly lower triangular matrix $B$. We do this by specifying some
+density $\delta$ and placing a random number in $[-1,1]$ on position $(i,j)$ with probability $\delta$. The matrix
+must be positive definite, which is achieved \cite[Ex.~24.2]{trefbau} if
 \[
-|A_{ii}| > \sum_{j=1, j\ne i}^n |A_{ij}|= \sum_{j=1}^{i-1} |B_{ij}| + |B_{ji}|.
+  |A_{ii}| > \sum_{j=1, j\ne i}^n |A_{ij}|= \sum_{j=1}^{i-1} |B_{ij}| + |B_{ji}|.
 \]
-While placing the non-zeros in the lower triangular part of $B$, we therefore iteratively store the sum in the right hand side of this equation for the
-corresponding diagonal element. Let $\mu$ be the maximum of these sums, we now know that $B + B^t + uI$ is a symmetric
-positive definite matrix. Finally, to add some more randomness to the diagonal, we replace the diagonal element $u$ by a random number in $[\mu, \mu + 2]$ on with chance $\delta$.
+While placing the non-zero entries in the lower triangular part of $B$, we therefore iteratively store the sum in the right hand side of this equation for the
+corresponding diagonal element. Let $\mu$ be the maximum of these sums, we now know that $B + B^\top + \mu I$ is a symmetric
+positive definite matrix. Finally, to add some more randomness to the diagonal, we replace the diagonal element $\mu$ by a random number in $[\mu, \mu + 2]$ with probability $\delta$.
 
-This parameter $\delta$ gives is an indication for how the `sparness' of the matrix. With this method we can generate a variety of matrices
+This parameter $\delta$ gives us an indication for the `sparseness' of the matrix.\footnote{It is actually not the density but the amount of non-zero entries per TODO row/column that is important to the complexity of the matrix-vector product \cite[p.~178]{biss04}. As we are dealing with a square matrix, these two quantities are actually equivalent.} With this method we can generate a variety of matrices
 for different combinations of $n$ and $\delta$, which gives insight in the performance of our parallel implementation.
 \subsection{Profiling}
 \subsection{Scaling tests}
-With these matrices in hand, we can perform scaling tests by varying $p$, $n$ and $\delta$.
+With these matrices in hand, we can perform scaling tests by varying 
+\[ p \in \{1, 2, 4, \ldots, 64\}, \quad n \in \{64, 128, \ldots, 4096 \}, \quad \delta \in \{0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2\} \]
+for slightly less than\footnote{Some matrices created errors. For instance $n = 64, \delta = 0.01$ creates on average $40.96$ non-zeroes. Trying to call Mondriaan with $p=64$ on this matrix generates an error.} $7 \cdot 7 \cdot 7 = 343$ matrices and for each matrix, approximated the solution $x$ to $Ax=b$ with $b$ equal to
+\begin{enumerate}
+  \item $b = \vec 1 = (1, \ldots, 1)$ (easy right-hand side);
+  \item $b = A\vec 1$ (known solution);
+  \item $b_i \in [0, 1]$ random (random right-hand side).
+\end{enumerate}
+
+For each system, we computed:
+\begin{gather*} 
+P, n, nz(A), \delta = nz(A)/n^2, k \text{(number of iterations)}, \\
+t_i~ \text{(time to initialize)}, \quad t_{mv}~ \text{(time matrix-vector)}, \quad t_{ip}~ \text{(time inner product)}, \\
+t_l~ \text{(time local operations)}, \quad t_g~ \text{(time spent computing global solution)}, \\
+t_c = t_{mv} + t_{ip} + t_l~ \text{(time spent in while-loop)}, \quad t = t_i + t_{mv} + t_{ip} + t_l + t_g~ \text{(total time)}.
+\end{gather*}
+
+The first thing we saw is that the choice of RHS is hardly important for the computation time $t_c$. We therefore made the arbitrary choice to use $b = \vec 1$.
+
+We quickly realized that time spent doing local operations $t_l$ and computing global solution $t_g$ will probably not be of much significance. This was quickly verified: see Figure~\ref{fig:nonsig}.
+\begin{figure}
+  \includegraphics[width=0.49\linewidth]{tlt.png}
+  \includegraphics[width=0.49\linewidth]{tgt.png}
+  \caption{Percentage of total time spent doing local computations (left) and finding the global solution from the local components (right).}
+  \label{fig:nonsig}
+\end{figure}
+
+One other thing we noticed right away is the fact that for our class of matrices $A = B + B^\top + \mu I$, $k$ is very low (in the order of 10). This has the effect that $t_i$ greatly overshadows $t_c$ for large $nz(A)$: see Figure~\ref{fig:quotient}. The reason for this is very insightful to the problem: while strict diagonal dominance implies positive definiteness, it also implies that the diagonal elements are \emph{much} larger than the off-diagonal elements. The resulting matrix is close to being diagonal! As solving $Ax=b$ for a diagonal matrix using CG completes in one step, it is no surprise that CG ends quickly when $A$ is near-diagonal.
+
+\begin{figure}
+  \includegraphics[width=\linewidth]{quotient.png}
+  \caption{Quotient of initialization time $t_i$ and computation time $t_c$ for random matrices $A$ as function of $nz(A)$.}
+  \label{fig:quotient}
+\end{figure}
+
+Taking $n \in \{2048, 4096\}$ and $\delta \in \{0.1, 0.2\}$, we get a few sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these four matrices yields Figure~\ref{fig:samples}. We see that the optimal computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ as $t_l \approx 0$ by Figure~\ref{fig:nonsig}) seems to lie somewhere between $p=8$ and $p=32$. This result can be explained by the following fact: the systems we used are still too small to scale to a non-shared-memory system. As the Cartesius hardware uses nodes with 12 cores and 2 threads per core, for $p \leq 24$, everything is shared-memory. The solution for this would be to create larger systems. This was however not really possible by the limitations of Mondriaan.
+
+\begin{figure}
+  \includegraphics[width=0.48\linewidth]{n2048d0_1mvip.png}
+  \includegraphics[width=0.48\linewidth]{n2048d0_2mvip.png}
+  \includegraphics[width=0.48\linewidth]{n4096d0_1mvip.png}
+  \includegraphics[width=0.48\linewidth]{n4096d0_2mvip.png}
+  \caption{Timing results for various sample matrices. Purple: $t_{ip}$; green: $t_{mv}$. Top row: $\delta = 0.1$. Bottom row: $\delta = 0.2$. Left column: $n = 2048$. Right column: $n = 4096$.}
+  \label{fig:samples}
+\end{figure}
 
 \section{Creating FEM matrices}
 \section{hoe heette het ook alweer als je na een kleine verandering in je matrix opnieuw ging optimizen}
