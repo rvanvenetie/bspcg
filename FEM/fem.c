@@ -44,106 +44,37 @@ typedef struct {
 	int n_tri;
 } mesh_t;
 
+generate_element_matrix( double *x, double *y, double *t, int n) { //ofzo
+  static double A[9] = {0.5, -0.5, 0, 
+                        -0.5, 0.5, 0, 
+                        0, 0, 0};
+  static double B[9] = {1, -0.5, -0.5,
+                        -0.5, 0, 0.5,
+                        -0.5, 0.5, 0};
+  static double C[9] = {0.5, 0, -0.5,
+                        0, 0, 0,
+                        -0.5, 0, 0.5};
+  static double rhs[3] = {1.0/6.0};
+  int v1 = t[n*3 + 0];
+  int v2 = t[n*3 + 1];
+  int v3 = t[n*3 + 2];
+  double f11 = x[v2] - x[v1];
+  double f12 = x[v3] - x[v1];
+  double f21 = y[v2] - y[v1];
+  double f22 = y[v3] - y[v1];
+  double D = f11*f22 - f12*f21;
+  double E1 = f12*f12 + f22*f22;
+  double E2 = f11*f12 + f21*f22;
+  double E3 = f11*f11 + f21*f21;
 
-
-fem_system *generate_fem_system( workspace *w, elnode *eln) {
-  int n = w->b->n;
-
-  fem_system *sys = malloc( sizeof( fem_system));
-  sys->A = malloc( eln->M * eln->M * sizeof( double));
-  sys->f = malloc( eln->M * sizeof( double));
-  sys->M = eln->M;
-
-  for( int i = 0; i < sys->M; i++) {
-    for( int j = 0; j < sys->M; j++) {
-      sys->A[i*sys->M + j] = 0.0;
+  for( int r = 0; r < 3; r++) {
+    for( int s = 0; s <= r; s++) {
+      double krs = 1/fabs( D) * (E1*A[r*3+s] - E2*B[r*3+s] + E3*C[r*3+s]); //TODO of dit moet een +E2 zijn
     }
-    sys->f[i] = 0.0;
+
+    double gr = fabs(D) * rhs[r]; //local rhs component
   }
-
-  for( int l = 0; l < w->nleaves; l++) {
-    tri *t = w->leaves[l]->tt;
-    point a = w->points[t->p[0]];
-    point b = w->points[t->p[1]];
-    point c = w->points[t->p[2]];
-    double f11 = b.x - a.x;
-    double f12 = c.x - a.x;
-    double f21 = b.y - a.y;
-    double f22 = c.y - a.y;
-    double D = f11*f22 - f12*f21;
-    double E1 = f12*f12 + f22*f22;
-    double E2 = f11*f12 + f21*f22;
-    double E3 = f11*f11 + f21*f21;
-
-    int nn = find_n( w->leaves[l]->r);
-    int dof = (nn+1)*(nn+2)/2;
-
-    for( int r = 0; r < dof; r++) {
-      int i = eln->e[l*n + r];
-      if( i == -1) continue;
-      for( int s = 0; s <= r; s++) {
-        int j = eln->e[l*n + s];
-        if( j == -1) continue;
-        double krs = 1/fabs( D) * (E1*w->b->A[tritype_to_rtype(t)*n*n + r*n+s] 
-                                 + E2*w->b->B[tritype_to_rtype(t)*n*n + r*n+s] 
-                                 + E3*w->b->C[tritype_to_rtype(t)*n*n + r*n+s]);
-        sys->A[i*sys->M + j] += krs;
-        if( j != i) {
-          sys->A[j*sys->M + i] += krs;
-        }
-      }
-
-      sys->f[i] += fabs(D) * w->b->f[tritype_to_rtype(t)*n + r];
-    }
-  }
-
-  return sys;
 }
-
-
-
-void AssembleA(mesh_t mesh) {
-	double EA1[] = {-1, -1,
-		  					   1,  0,
-									 0,  1};
-	double EA2[] = {-1, 1, 0,
-		  						-1, 0, 1};
-	//Sparse matrix 
-	int * I, int * J;
-	double *A;
-	double *A; //Sparse matrix holding the inner products
-	for (int k = 0; k < mesh.n_tri; k++) //Loop over all triangles
-	{
-		int Tk[3] = mesh.t[k];
-		//B is a 2x2 matrix holding the transformation matrix
-		//D(F_k^-1)
-		double B[] = {x[Tk[1]] - x[Tk[0]], x[Tk[2]] - x[Tk[0]],
-									y[Tk[1]] - y[Tk[0]], y[Tk[2]] - y[Tk[0]]};
-		
-		double * Ak;
-
-		/*
- def AssembleA(N,T,G):
- EA1 = np.mat([[-1,-1],[1,0],[0,1]])
- EA2 = np.mat([[-1,1,0],[-1,0,1]])
- n = N.shape[0] #Amount of vertices
- m = T.shape[0] #Amount of triangles
- A = np.zeros((n,n)) #Create matrix that is going to hold all the inproducts
- for k in range(m):
- Tk = T[k,:] #Vertices current triangle
- C = N[Tk,:].T #Get coordinates of the vertices
- B = np.mat(C[:,[1,2]] - C[:,[0, 0]]) #Assemble transformation matrix of D(F_k^-1)
- BI = np.linalg.inv(B) #Inverse of B (TODO hard code inverse?)
-#
-Ak = 0.5 * abs(np.linalg.det(B)) * EA1 * BI * BI.T * EA2 #See theory
-#Now we can calculate all the nonzero inproducts on triangle k.
-A[np.ix_(Tk,Tk)] = A[np.ix_(Tk,Tk)] + Ak
-return AV
-*/
-
-	
-
-
 
 
 
