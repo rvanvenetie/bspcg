@@ -44,7 +44,23 @@ typedef struct {
 	int n_tri;
 } mesh_t;
 
-generate_element_matrix( double *x, double *y, double *t, int n) { //ofzo
+generate_element_matrix( double *x, double *y, int t[3], int n) { //ofzo
+  //Dit is eigenlijk gewoon gelijk aan het product van twee matrices
+  //Minder duidelijk zo?
+  //http://en.wikipedia.org/wiki/Stiffness_matrix (Die matrix D onderin)
+  static double D[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
+											 y[t[2]] - y[t[1]], y[t[0]] - y[t[2]], y[t[1]] - y[t[0]]};
+  //Area triangle times 2
+  double area = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
+  //Calculate the upper part of Ak. Ak \gets area / 2.0 * D.T * D
+  double C[3*3];
+  cblas_dsyrk('U', 'T', 3, 2, area / 2.0, D, 2, 0, C, 3);
+  //C should now hold the correct values??????
+  for (int i = 0; i < 3; i++)
+   for (int j = 0; j <= i; j++)
+     fprintf(stderr,"C[%d,%d] = %g\n", i,j, C[i*3 + j]);
+
+
   static double A[9] = {0.5, -0.5, 0, 
                         -0.5, 0.5, 0, 
                         0, 0, 0};
@@ -70,6 +86,7 @@ generate_element_matrix( double *x, double *y, double *t, int n) { //ofzo
   for( int r = 0; r < 3; r++) {
     for( int s = 0; s <= r; s++) {
       double krs = 1/fabs( D) * (E1*A[r*3+s] - E2*B[r*3+s] + E3*C[r*3+s]); //TODO of dit moet een +E2 zijn
+      fprintf(stderr,"Bla[%d,%d] = %g\n", r,s, krs);
     }
 
     double gr = fabs(D) * rhs[r]; //local rhs component
