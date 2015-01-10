@@ -14,4 +14,6 @@ typedef struct {
   int *d; //distribution
   matrix_s *hypergraph;
 } mesh_s;
+
+
 #endif

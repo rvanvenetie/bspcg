@@ -1,20 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
-
-typedef struct {
-  int n, m, nz, lennz;
-  int *I, *J;
-  double *val;
-} matrix_s;
-
-typedef struct {
-  int nverts, ntris, P;
-  double *x, *y; //x and y coords
-  int *b; //boundary
-  int *t; //tris coords, len = ntris*3
-  int *d; //distribution
-  matrix_s *hypergraph;
-} mesh_s;
+#include "mesh.h"
 
 matrix_s *create( int n, int m) {
   matrix_s *mat = malloc( sizeof( matrix_s));

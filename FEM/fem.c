@@ -35,14 +35,97 @@
  * - Matrix distribution: We calculate the FEM-matrix. We now
  *
 */
-typedef struct {
-	double *x, *y;
-	int * b;
-	int * t[3]; 
 
-	int n_vert;
-	int n_tri;
-} mesh_t;
+/* Data structure for the (distributed) triangulation */
+typedef struct {
+  /* Vertices */
+  double *x, *y;//Coordinates
+	int * b;      //Lies on boundary of domain?
+  int n_vert;   //Amount of vertices
+  
+  /* Triangles */
+  int * t[3];   //Triangles consist of three vertices
+  int * p;      //Processor that is owner of this triangle
+  int n_tri;    //Amount of triangles
+} mesh_dist;
+
+ 
+/* Data structure for the data of each processor */
+typedef struct {
+  /*
+   * Vertices used in this processor. First we store the shared
+   * vertices, then we save all the vertices we `own'.
+   */
+  double *x, *y;		 //Vertices 
+  int n_vert;				 //Length of the array
+  int n_shared;			 //Amount of shared vertices
+  int n_shared_owned;//Amount of shared vertices that we own
+  int * p_shared;    //Amount of processors that share this vertex
+  int ** i_shared;   //Array of (p,i_loc), giving the local index on processor p for this vertex
+  int * i_glob;			 //Global index that corresponds to the local vertex
+  int * b;					 //Indicates whether this vertex lies on the boundary
+
+  /* Triangles on this processor */
+  int * t[3]; 
+  int n_vert; 
+
+  /* FEM matrix for this processor */
+  matrix_s mat;
+} bsp_fem_data;
+
+
+bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
+	/*
+	 * We assume that s=0 has the entire initial distribution.
+	 * This might not be the case in real applications.. TODO:
+	 * storing the mesh in a split way, must include ghost cells. Bla bla
+	 */
+
+	/*
+	 * We need to distribute the triangles and vertices to the designated processors.
+	 * We do not want to send unneccesary data. For every vertex we create a \emph{set}
+	 * of processors that is using this vertex.
+	 *
+	 * In c++ this can be implemented easily using bitvector/set, we use a 64-bit int.
+	 * Hacky/lazy solution. This implies a restriction of p <= 64!
+	 */
+	if (p > 64)
+	{
+		fprintf(stderr, "Cannot handle more than 64 processors.");
+		exit(0);
+	}
+	if (s == 0) {
+		long long unsigned int * vert_p= calloc(sizeof(long long unsigned int), mesh->n_vert); //Store the set
+
+		//Loop over triangles to determine which processor owns which vertex
+		for (int i = 0; i < mesh->n_tri; i++) 
+			for (int v = 0; v < 3; v++) //triangle has 3 vertices
+				//Processor that owns triangle i uses vertex v
+				vert_p[mesh->t[i][v]] |= 1 << mesh->p[i];
+
+
+		/*
+		 * We now have a set of processors for each vertex (given by the bit states).
+		 * If a vertex is shared among multiple processors we have to decide who
+		 * is going to be the 'owner' of the vertex. We simple give the processor
+		 * with the smallest number the owner. 
+		 * 
+		 * First give all the processors the vertices they own.
+		 * Next we give all the processors the shared vertices they own.
+		 * At last we give all the processors the shared vertices they do not own.
+		 *
+		 * TODO: Even out the amount of vertices owned by a processor, this implies
+		 * a better distribution of the vector among the processors.
+		 */
+
+		__builtin_popcountll
+			//We now know which vertex is owned by which processors (set as bit).
+	
+}
+
+
+}
+
 
 generate_element_matrix( double *x, double *y, int t[3], int n) { //ofzo
   //Dit is eigenlijk gewoon gelijk aan het product van twee matrices
