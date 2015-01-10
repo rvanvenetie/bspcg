@@ -1,340 +1,65 @@
 Timing for niters=100 maxh=256
-p= 1, r= 8720.746 Mflop/s, g= 186.6, l= 16053.1
-p= 2, r= 9336.885 Mflop/s, g= 288.2, l= 60794.5
-p= 3, r= 9286.416 Mflop/s, g= 352.4, l= 92948.1
-p= 4, r= 9188.147 Mflop/s, g= 270.1, l= 93205.6
-p= 5, r= 9160.249 Mflop/s, g= 276.9, l= 124049.8
-p= 6, r= 8914.246 Mflop/s, g= 269.1, l= 138727.4
-p= 7, r= 9272.916 Mflop/s, g= 306.3, l= 156181.9
-p= 8, r= 8807.346 Mflop/s, g= 294.6, l= 149199.2
-p= 9, r= 9237.849 Mflop/s, g= 299.1, l= 153782.9
-p= 10, r= 9154.811 Mflop/s, g= 311.9, l= 150023.8
-p= 11, r= 9197.088 Mflop/s, g= 308.6, l= 169562.6
-p= 12, r= 9203.028 Mflop/s, g= 336.6, l= 164862.9
-p= 13, r= 9222.471 Mflop/s, g= 352.1, l= 188631.0
-p= 14, r= 8781.880 Mflop/s, g= 380.8, l= 176368.1
-p= 15, r= 9165.343 Mflop/s, g= 377.9, l= 198925.0
-p= 16, r= 9161.136 Mflop/s, g= 420.4, l= 197748.2
-p= 17, r= 9249.143 Mflop/s, g= 385.5, l= 235072.3
-p= 18, r= 9174.721 Mflop/s, g= 391.7, l= 226827.1
-p= 19, r= 9232.436 Mflop/s, g= 399.4, l= 244579.4
-p= 20, r= 9255.001 Mflop/s, g= 373.7, l= 248745.0
-p= 21, r= 9192.826 Mflop/s, g= 444.7, l= 254613.9
-p= 22, r= 9241.991 Mflop/s, g= 426.0, l= 258138.2
-p= 23, r= 9254.662 Mflop/s, g= 586.9, l= 359864.2
-p= 24, r= 8979.180 Mflop/s, g= 774.6, l= 494463.5
-p= 25, r= 9227.690 Mflop/s, g= 991.3, l= 651436.6
-p= 26, r= 9076.432 Mflop/s, g= 1056.7, l= 784080.3
-p= 27, r= 9180.850 Mflop/s, g= 1209.9, l= 933481.3
-p= 28, r= 9197.047 Mflop/s, g= 1350.1, l= 1102598.5
-p= 29, r= 9217.275 Mflop/s, g= 1487.0, l= 1291409.9
-p= 30, r= 9024.823 Mflop/s, g= 1570.1, l= 1407964.1
-p= 31, r= 9057.672 Mflop/s, g= 1716.0, l= 1545328.3
-p= 32, r= 9214.527 Mflop/s, g= 4361.4, l= 1592160.6
-p= 33, r= 9200.334 Mflop/s, g= 4229.8, l= 1671220.8
-p= 34, r= 9019.757 Mflop/s, g= 4136.2, l= 1626514.1
-p= 35, r= 9167.235 Mflop/s, g= 4107.5, l= 1725963.6
-p= 36, r= 9113.951 Mflop/s, g= 4175.6, l= 1660636.2
-p= 37, r= 9185.441 Mflop/s, g= 4332.8, l= 1721473.8
-p= 38, r= 9202.536 Mflop/s, g= 4248.0, l= 1716432.9
-p= 39, r= 9193.366 Mflop/s, g= 4385.0, l= 1766209.4
-p= 40, r= 9194.432 Mflop/s, g= 4181.4, l= 1724588.6
-p= 41, r= 9209.902 Mflop/s, g= 4256.7, l= 1793111.7
-p= 42, r= 9026.226 Mflop/s, g= 4236.3, l= 1711269.3
-p= 43, r= 9205.444 Mflop/s, g= 4200.5, l= 1817470.0
-p= 44, r= 9199.450 Mflop/s, g= 5000.6, l= 2102804.1
-p= 45, r= 9207.968 Mflop/s, g= 4790.6, l= 2193915.1
-p= 46, r= 9132.329 Mflop/s, g= 4981.1, l= 2136960.6
-*** glibc detected *** /nfs/home2/bissstud/Students14/Jan/BSPedupack1.02/./bench_100_1024_256: double free or corruption (out): 0x0000000001b6a760 ***
-p= 47, r= 9189.371 Mflop/s, g= 4846.0, l= 2209565.6
-======= Backtrace: =========
-/lib64/libc.so.6[0x323a275e76]
-/lib64/libc.so.6[0x323a2789b3]
-/opt/intel/impi/4.1.0.024/intel64/lib/libmpi.so.4(+0x19f0fd)[0x2ab31e6980fd]
-/hpc/sw/bsponmpi-0.3-intel/lib/libbsponmpi.so.0(bsp_end+0x70)[0x2ab31e2f3d40]
-/nfs/home2/bissstud/Students14/Jan/BSPedupack1.02/./bench_100_1024_256[0x402f5c]
-/hpc/sw/bsponmpi-0.3-intel/lib/libbsponmpi.so.0(bsp_init+0x54)[0x2ab31e2f5af4]
-/nfs/home2/bissstud/Students14/Jan/BSPedupack1.02/./bench_100_1024_256[0x40114f]
-/lib64/libc.so.6(__libc_start_main+0xfd)[0x323a21ed5d]
-/nfs/home2/bissstud/Students14/Jan/BSPedupack1.02/./bench_100_1024_256[0x401039]
-======= Memory map: ========
-00400000-0040f000 r-xp 00000000 00:14 504041931                          /nfs/home2/bissstud/Students14/Jan/BSPedupack1.02/bench_100_1024_256
-0060f000-00611000 rw-p 0000f000 00:14 504041931                          /nfs/home2/bissstud/Students14/Jan/BSPedupack1.02/bench_100_1024_256
-01ae7000-01be9000 rw-p 00000000 00:00 0                                  [heap]
-3239e00000-3239e20000 r-xp 00000000 fd:00 1966566                        /lib64/ld-2.12.so
-323a01f000-323a020000 r--p 0001f000 fd:00 1966566                        /lib64/ld-2.12.so
-323a020000-323a021000 rw-p 00020000 fd:00 1966566                        /lib64/ld-2.12.so
-323a021000-323a022000 rw-p 00000000 00:00 0 
-323a200000-323a38a000 r-xp 00000000 fd:00 1966567                        /lib64/libc-2.12.so
-323a38a000-323a58a000 ---p 0018a000 fd:00 1966567                        /lib64/libc-2.12.so
-323a58a000-323a58e000 r--p 0018a000 fd:00 1966567                        /lib64/libc-2.12.so
-323a58e000-323a58f000 rw-p 0018e000 fd:00 1966567                        /lib64/libc-2.12.so
-323a58f000-323a594000 rw-p 00000000 00:00 0 
-323a600000-323a602000 r-xp 00000000 fd:00 1966571                        /lib64/libdl-2.12.so
-323a602000-323a802000 ---p 00002000 fd:00 1966571                        /lib64/libdl-2.12.so
-323a802000-323a803000 r--p 00002000 fd:00 1966571                        /lib64/libdl-2.12.so
-323a803000-323a804000 rw-p 00003000 fd:00 1966571                        /lib64/libdl-2.12.so
-323aa00000-323aa17000 r-xp 00000000 fd:00 1966569                        /lib64/libpthread-2.12.so
-323aa17000-323ac17000 ---p 00017000 fd:00 1966569                        /lib64/libpthread-2.12.so
-323ac17000-323ac18000 r--p 00017000 fd:00 1966569                        /lib64/libpthread-2.12.so
-323ac18000-323ac19000 rw-p 00018000 fd:00 1966569                        /lib64/libpthread-2.12.so
-323ac19000-323ac1d000 rw-p 00000000 00:00 0 
-323ae00000-323ae15000 r-xp 00000000 fd:00 1966572                        /lib64/libz.so.1.2.3
-323ae15000-323b014000 ---p 00015000 fd:00 1966572                        /lib64/libz.so.1.2.3
-323b014000-323b015000 r--p 00014000 fd:00 1966572                        /lib64/libz.so.1.2.3
-323b015000-323b016000 rw-p 00015000 fd:00 1966572                        /lib64/libz.so.1.2.3
-323b200000-323b283000 r-xp 00000000 fd:00 1966573                        /lib64/libm-2.12.so
-323b283000-323b482000 ---p 00083000 fd:00 1966573                        /lib64/libm-2.12.so
-323b482000-323b483000 r--p 00082000 fd:00 1966573                        /lib64/libm-2.12.so
-323b483000-323b484000 rw-p 00083000 fd:00 1966573                        /lib64/libm-2.12.so
-323b600000-323b607000 r-xp 00000000 fd:00 1966570                        /lib64/librt-2.12.so
-323b607000-323b806000 ---p 00007000 fd:00 1966570                        /lib64/librt-2.12.so
-323b806000-323b807000 r--p 00006000 fd:00 1966570                        /lib64/librt-2.12.so
-323b807000-323b808000 rw-p 00007000 fd:00 1966570                        /lib64/librt-2.12.so
-323ba00000-323ba16000 r-xp 00000000 fd:00 1966568                        /lib64/libgcc_s-4.4.7-20120601.so.1
-323ba16000-323bc15000 ---p 00016000 fd:00 1966568                        /lib64/libgcc_s-4.4.7-20120601.so.1
-323bc15000-323bc16000 rw-p 00015000 fd:00 1966568                        /lib64/libgcc_s-4.4.7-20120601.so.1
-323c600000-323c616000 r-xp 00000000 fd:00 1966582                        /lib64/libresolv-2.12.so
-323c616000-323c816000 ---p 00016000 fd:00 1966582                        /lib64/libresolv-2.12.so
-323c816000-323c817000 r--p 00016000 fd:00 1966582                        /lib64/libresolv-2.12.so
-323c817000-323c818000 rw-p 00017000 fd:00 1966582                        /lib64/libresolv-2.12.so
-323c818000-323c81a000 rw-p 00000000 00:00 0 
-323ca00000-323ca0b000 r-xp 00000000 fd:00 1966583                        /lib64/libpci.so.3.1.10
-323ca0b000-323cc0b000 ---p 0000b000 fd:00 1966583                        /lib64/libpci.so.3.1.10
-323cc0b000-323cc0c000 rw-p 0000b000 fd:00 1966583                        /lib64/libpci.so.3.1.10
-3244400000-3244548000 r-xp 00000000 fd:00 3287700                        /usr/lib64/libxml2.so.2.7.6
-3244548000-3244748000 ---p 00148000 fd:00 3287700                        /usr/lib64/libxml2.so.2.7.6
-3244748000-3244751000 rw-p 00148000 fd:00 3287700                        /usr/lib64/libxml2.so.2.7.6
-3244751000-3244753000 rw-p 00000000 00:00 0 
-3739600000-3739627000 r-xp 00000000 fd:00 3280829                        /usr/lib64/libhwloc.so.5.1.0
-3739627000-3739827000 ---p 00027000 fd:00 3280829                        /usr/lib64/libhwloc.so.5.1.0
-3739827000-3739828000 rw-p 00027000 fd:00 3280829                        /usr/lib64/libhwloc.so.5.1.0
-2ab31e2d9000-2ab31e2da000 rw-p 00000000 00:00 0 
-2ab31e2f1000-2ab31e2f2000 rw-p 00000000 00:00 0 
-2ab31e2f2000-2ab31e2f8000 r-xp 00000000 00:12 189792981                  /nfs/admin/hpc/sw/bsponmpi-0.3-intel/lib/libbsponmpi.so.0.0.1
-2ab31e2f8000-2ab31e4f8000 ---p 00006000 00:12 189792981                  /nfs/admin/hpc/sw/bsponmpi-0.3-intel/lib/libbsponmpi.so.0.0.1
-2ab31e4f8000-2ab31e4f9000 rw-p 00006000 00:12 189792981                  /nfs/admin/hpc/sw/bsponmpi-0.3-intel/lib/libbsponmpi.so.0.0.1
-2ab31e4f9000-2ab31e8b3000 r-xp 00000000 00:12 150897731                  /nfs/admin/opt/intel/impi/4.1.0.024/intel64/lib/libmpi.so.4.1
-2ab31e8b3000-2ab31eab2000 ---p 003ba000 00:12 150897731                  /nfs/admin/opt/intel/impi/4.1.0.024/intel64/lib/libmpi.so.4.1
-2ab31eab2000-2ab31ead2000 rw-p 003b9000 00:12 150897731                  /nfs/admin/opt/intel/impi/4.1.0.024/intel64/lib/libmpi.so.4.1
-2ab31ead2000-2ab31eb1f000 rw-p 00000000 00:00 0 
-2ab31eb1f000-2ab31eb4e000 r-xp 00000000 00:12 150897807                  /nfs/admin/opt/intel/impi/4.1.0.024/intel64/lib/libmpigf.so.4.1
-2ab31eb4e000-2ab31ed4e000 ---p 0002f000 00:12 150897807                  /nfs/admin/opt/intel/impi/4.1.0.024/intel64/lib/libmpigf.so.4.1
-2ab31ed4e000-2ab31ed4f000 rw-p 0002f000 00:12 150897807                  /nfs/admin/opt/intel/impi/4.1.0.024/intel64/lib/libmpigf.so.4.1
-2ab31ed4f000-2ab31ed52000 rw-p 00000000 00:00 0 
-2ab31ed52000-2ab31ed57000 r-xp 00000000 fd:00 3287096                    /usr/lib64/libpmi.so.0.0.0
-2ab31ed57000-2ab31ef56000 ---p 00005000 fd:00 3287096                    /usr/lib64/libpmi.so.0.0.0
-2ab31ef56000-2ab31ef57000 rw-p 00004000 fd:00 3287096                    /usr/lib64/libpmi.so.0.0.0
-2ab31ef57000-2ab31f072000 r-xp 00000000 fd:00 3286474                    /usr/lib64/libslurm.so.26.0.0
-2ab31f072000-2ab31f272000 ---p 0011b000 fd:00 3286474                    /usr/lib64/libslurm.so.26.0.0
-2ab31f272000-2ab31f277000 rw-p 0011b000 fd:00 3286474                    /usr/lib64/libslurm.so.26.0.0
-2ab31f277000-2ab31f27b000 rw-p 00000000 00:00 0 
-2ab31f27b000-2ab31f283000 r-xp 00000000 fd:00 3280727                    /usr/lib64/libnuma.so.1
-2ab31f283000-2ab31f483000 ---p 00008000 fd:00 3280727                    /usr/lib64/libnuma.so.1
-2ab31f483000-2ab31f484000 rw-p 00008000 fd:00 3280727                    /usr/lib64/libnuma.so.1
-2ab31f49b000-2ab31f4a7000 r-xp 00000000 fd:00 1966099                    /lib64/libnss_files-2.12.so
-2ab31f4a7000-2ab31f6a7000 ---p 0000c000 fd:00 1966099                    /lib64/libnss_files-2.12.so
-2ab31f6a7000-2ab31f6a8000 r--p 0000c000 fd:00 1966099                    /lib64/libnss_files-2.12.so
-2ab31f6a8000-2ab31f6a9000 rw-p 0000d000 fd:00 1966099                    /lib64/libnss_files-2.12.so
-2ab31f6a9000-2ab31f6ac000 r-xp 00000000 fd:00 3408264                    /usr/lib64/slurm/auth_munge.so
-2ab31f6ac000-2ab31f8ab000 ---p 00003000 fd:00 3408264                    /usr/lib64/slurm/auth_munge.so
-2ab31f8ab000-2ab31f8ac000 rw-p 00002000 fd:00 3408264                    /usr/lib64/slurm/auth_munge.so
-2ab31f8c3000-2ab31f8cb000 r-xp 00000000 fd:00 3286510                    /usr/lib64/libmunge.so.2.0.0
-2ab31f8cb000-2ab31facb000 ---p 00008000 fd:00 3286510                    /usr/lib64/libmunge.so.2.0.0
-2ab31facb000-2ab31facc000 rw-p 00008000 fd:00 3286510                    /usr/lib64/libmunge.so.2.0.0
-2ab31facc000-2ab32bd15000 rw-s 00000000 00:0f 46044670                   /dev/shm/Intel_MPI_6whLOg (deleted)
-2ab32bd15000-2ab32bd16000 -w-s 181fff2ca000 00:05 11243                  /dev/infiniband/uverbs0
-2ab32bd16000-2ab32bd17000 -w-s 181fff6ca000 00:05 11243                  /dev/infiniband/uverbs0
-2ab32bd2c000-2ab32bd36000 r-xp 00000000 fd:00 3286860                    /usr/lib64/libdat2.so.2.0.0
-2ab32bd36000-2ab32bf35000 ---p 0000a000 fd:00 3286860                    /usr/lib64/libdat2.so.2.0.0
-2ab32bf35000-2ab32bf36000 rw-p 00009000 fd:00 3286860                    /usr/lib64/libdat2.so.2.0.0
-2ab32bf36000-2ab32bf54000 r-xp 00000000 fd:00 3286526                    /usr/lib64/libdaploscm.so.2.0.0
-2ab32bf54000-2ab32c154000 ---p 0001e000 fd:00 3286526                    /usr/lib64/libdaploscm.so.2.0.0
-2ab32c154000-2ab32c155000 rw-p 0001e000 fd:00 3286526                    /usr/lib64/libdaploscm.so.2.0.0
-2ab32c155000-2ab32c162000 r-xp 00000000 fd:00 3286025                    /usr/lib64/libibverbs.so.1.0.0
-2ab32c162000-2ab32c362000 ---p 0000d000 fd:00 3286025                    /usr/lib64/libibverbs.so.1.0.0
-2ab32c362000-2ab32c363000 rw-p 0000d000 fd:00 3286025                    /usr/lib64/libibverbs.so.1.0.0
-2ab32c363000-2ab32c36a000 r-xp 00000000 fd:00 3281534                    /usr/lib64/libmlx4-rdmav2.so
-2ab32c36a000-2ab32c569000 ---p 00007000 fd:00 3281534                    /usr/lib64/libmlx4-rdmav2.so
-2ab32c569000-2ab32c56a000 rw-p 00006000 fd:00 3281534                    /usr/lib64/libmlx4-rdmav2.so
-2ab32c56a000-2ab32c571000 r-xp 00000000 fd:00 3287278                    /usr/lib64/libmthca-rdmav2.so
-2ab32c571000-2ab32c771000 ---p 00007000 fd:00 3287278                    /usr/lib64/libmthca-rdmav2.so
-2ab32c771000-2ab32c772000 rw-p 00007000 fd:00 3287278                    /usr/lib64/libmthca-rdmav2.so
-2ab32c772000-2ab32c773000 ---p 00000000 00:00 0 
-2ab32c773000-2ab32c973000 rw-p 00000000 00:00 0 
-2ab32c973000-2ab32c974000 ---p 00000000 00:00 0 
-2ab32c974000-2ab32d784000 rw-p 00000000 00:00 0 
-2ab330000000-2ab330041000 rw-p 00000000 00:00 0 
-2ab330041000-2ab334000000 ---p 00000000 00:00 0 
-7fff3c3b4000-7fff3c3d4000 rw-p 00000000 00:00 0                          [stack]
-7fff3c3ff000-7fff3c400000 r-xp 00000000 00:00 0                          [vdso]
-ffffffffff600000-ffffffffff601000 r-xp 00000000 00:00 0                  [vsyscall]
-[42:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 42
-[11:tcn1] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 11
-[12:tcn1] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 12
-[4:tcn1] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 4
-[0:tcn1] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 0
-[35:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 35
-[41:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 41
-[39:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 39
-[28:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 28
-[27:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 27
-[22:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 22
-[25:tcn2] unexpected disconnect completion event from [43:tcn3]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 25
-[36:tcn2] unexpected disconnect completion event from [4:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 36
-[10:tcn1] unexpected disconnect completion event from [42:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 10
-[3:tcn1] unexpected disconnect completion event from [42:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 3
-[19:tcn1] unexpected disconnect completion event from [27:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 19
-[17:tcn1] unexpected disconnect completion event from [25:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 17
-[9:tcn1] unexpected disconnect completion event from [25:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 9
-[21:tcn1] unexpected disconnect completion event from [25:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 21
-[20:tcn1] unexpected disconnect completion event from [28:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 20
-[13:tcn1] unexpected disconnect completion event from [28:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 13
-[8:tcn1] unexpected disconnect completion event from [39:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 8
-[7:tcn1] unexpected disconnect completion event from [39:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 7
-[2:tcn1] unexpected disconnect completion event from [41:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 2
-[18:tcn1] unexpected disconnect completion event from [26:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 18
-[5:tcn1] unexpected disconnect completion event from [36:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 5
-[14:tcn1] unexpected disconnect completion event from [22:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 14
-[6:tcn1] unexpected disconnect completion event from [22:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 6
-[26:tcn2] unexpected disconnect completion event from [11:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 26
-[34:tcn2] unexpected disconnect completion event from [3:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 34
-[32:tcn2] unexpected disconnect completion event from [3:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 32
-[33:tcn2] unexpected disconnect completion event from [17:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 33
-[40:tcn2] unexpected disconnect completion event from [9:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 40
-[24:tcn2] unexpected disconnect completion event from [9:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 24
-[16:tcn1] unexpected disconnect completion event from [32:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-[23:tcn2] unexpected disconnect completion event from [19:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 23
-internal ABORT - process 16
-[29:tcn2] unexpected disconnect completion event from [13:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 29
-[37:tcn2] unexpected disconnect completion event from [13:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 37
-[1:tcn1] unexpected disconnect completion event from [32:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 1
-[15:tcn1] unexpected disconnect completion event from [23:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 15
-[52:tcn3] unexpected disconnect completion event from [36:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 52
-[38:tcn2] unexpected disconnect completion event from [7:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 38
-[30:tcn2] unexpected disconnect completion event from [14:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 30
-[31:tcn2] unexpected disconnect completion event from [16:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 31
-srun: error: tcn3: task 43: Aborted (core dumped)
-srun: Terminating job step 1116419.46
-[51:tcn3] unexpected disconnect completion event from [35:tcn2]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 51
-[53:tcn3] unexpected disconnect completion event from [21:tcn1]
-Assertion failed in file ../../dapl_conn_rc.c at line 1128: 0
-internal ABORT - process 53
-slurmd[tcn1]: *** STEP 1116419.46 KILLED AT 2015-01-09T22:39:39 WITH SIGNAL 9 ***
-srun: error: tcn3: task 52: Exited with exit code 1
-slurmd[tcn2]: *** STEP 1116419.46 KILLED AT 2015-01-09T22:39:39 WITH SIGNAL 9 ***
-slurmd[tcn3]: *** STEP 1116419.46 KILLED AT 2015-01-09T22:39:39 WITH SIGNAL 9 ***
-srun: Job step aborted: Waiting up to 2 seconds for job step to finish.
-slurmd[tcn1]: *** STEP 1116419.46 KILLED AT 2015-01-09T22:39:39 WITH SIGNAL 9 ***
-slurmd[tcn2]: *** STEP 1116419.46 KILLED AT 2015-01-09T22:39:39 WITH SIGNAL 9 ***
-slurmd[tcn3]: *** STEP 1116419.46 KILLED AT 2015-01-09T22:39:39 WITH SIGNAL 9 ***
-srun: error: tcn2: tasks 22-42: Exited with exit code 1
-srun: error: tcn1: tasks 0-21: Exited with exit code 1
-srun: error: tcn3: tasks 44-50,54-63: Killed
-srun: error: tcn3: tasks 51,53: Exited with exit code 1
-p= 48, r= 9213.946 Mflop/s, g= 4995.6, l= 2182889.6
-p= 49, r= 9103.943 Mflop/s, g= 4882.8, l= 2228158.3
-p= 50, r= 9210.014 Mflop/s, g= 5096.8, l= 2234042.3
-p= 51, r= 9141.778 Mflop/s, g= 5069.7, l= 2236038.7
-p= 52, r= 9203.493 Mflop/s, g= 4903.1, l= 2285256.7
-p= 53, r= 9103.992 Mflop/s, g= 5145.3, l= 2274144.3
-p= 54, r= 9196.580 Mflop/s, g= 5198.4, l= 2393975.3
-p= 55, r= 9213.939 Mflop/s, g= 5035.9, l= 2392771.9
-p= 56, r= 9192.580 Mflop/s, g= 5209.1, l= 2403309.2
-p= 57, r= 9156.285 Mflop/s, g= 5187.5, l= 2399601.2
-p= 58, r= 9190.073 Mflop/s, g= 5195.4, l= 2401858.7
-p= 59, r= 9203.266 Mflop/s, g= 5252.6, l= 2391530.1
-p= 60, r= 9191.100 Mflop/s, g= 5325.4, l= 2381987.9
-p= 61, r= 9205.306 Mflop/s, g= 5261.0, l= 2419125.6
-p= 62, r= 9143.028 Mflop/s, g= 5276.6, l= 2375635.4
-p= 63, r= 9203.892 Mflop/s, g= 5274.5, l= 2365553.5
-p= 64, r= 9192.042 Mflop/s, g= 5343.5, l= 2333520.1
+1	8720.746	186.6	16053.1
+2	9336.885	288.2	60794.5
+3	9286.416	352.4	92948.1
+4	9188.147	270.1	93205.6
+5	9160.249	276.9	124049.8
+6	8914.246	269.1	138727.4
+7	9272.916	306.3	156181.9
+8	8807.346	294.6	149199.2
+9	9237.849	299.1	153782.9
+10	9154.811	311.9	150023.8
+11	9197.088	308.6	169562.6
+12	9203.028	336.6	164862.9
+13	9222.471	352.1	188631.0
+14	8781.880	380.8	176368.1
+15	9165.343	377.9	198925.0
+16	9161.136	420.4	197748.2
+17	9249.143	385.5	235072.3
+18	9174.721	391.7	226827.1
+19	9232.436	399.4	244579.4
+20	9255.001	373.7	248745.0
+21	9192.826	444.7	254613.9
+22	9241.991	426.0	258138.2
+23	9254.662	586.9	359864.2
+24	8979.180	774.6	494463.5
+25	9227.690	991.3	651436.6
+26	9076.432	1056.7	784080.3
+27	9180.850	1209.9	933481.3
+28	9197.047	1350.1	1102598.5
+29	9217.275	1487.0	1291409.9
+30	9024.823	1570.1	1407964.1
+31	9057.672	1716.0	1545328.3
+32	9214.527	4361.4	1592160.6
+33	9200.334	4229.8	1671220.8
+34	9019.757	4136.2	1626514.1
+35	9167.235	4107.5	1725963.6
+36	9113.951	4175.6	1660636.2
+37	9185.441	4332.8	1721473.8
+38	9202.536	4248.0	1716432.9
+39	9193.366	4385.0	1766209.4
+40	9194.432	4181.4	1724588.6
+41	9209.902	4256.7	1793111.7
+42	9026.226	4236.3	1711269.3
+43	9205.444	4200.5	1817470.0
+44	9199.450	5000.6	2102804.1
+45	9207.968	4790.6	2193915.1
+46	9132.329	4981.1	2136960.6
+47	9189.371	4846.0	2209565.6
+48	9213.946	4995.6	2182889.6
+49	9103.943	4882.8	2228158.3
+50	9210.014	5096.8	2234042.3
+51	9141.778	5069.7	2236038.7
+52	9203.493	4903.1	2285256.7
+53	9103.992	5145.3	2274144.3
+54	9196.580	5198.4	2393975.3
+55	9213.939	5035.9	2392771.9
+56	9192.580	5209.1	2403309.2
+57	9156.285	5187.5	2399601.2
+58	9190.073	5195.4	2401858.7
+59	9203.266	5252.6	2391530.1
+60	9191.100	5325.4	2381987.9
+61	9205.306	5261.0	2419125.6
+62	9143.028	5276.6	2375635.4
+63	9203.892	5274.5	2365553.5
+64	9192.042	5343.5	2333520.1

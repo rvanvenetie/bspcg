@@ -241,7 +241,7 @@ A more advanced preconditioner that is often used in the symmetric positive defi
 \section{Parallellizing CG}
 With our sequential algorithm in hand, we are now ready to parallellize the Conjugate gradient method. Given the symmetric positive definite matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
 
-Every iteration of Algorithm~\ref{alg:seqcg} has 5 vector updates, two inner products and one matrix-vector multiplication. As $nz(A) \gg n$, the matrix-vector multiplication will likely [TODO profiling result] be the most time consuming. Thus, we want to optimize the distribution of $A$. To find the distributions of $A$ and $b$ (and with this, the distributions of all other vectors) we can use Mondriaan.\footnote{Mondriaan is a sequential program written in C that can be used to partition a rectangular sparse matrix, an input vector, and an output vector for parallel sparse matrix-vector multiplication. The program is based on a recursive bipartitioning algorithm that cuts the matrix horizontally and vertically, in a manner resembling some of the famous Mondriaan paintings. The algorithm is multilevel, hypergraph-based, and two-dimensional. It reduces the amount of communication and it spreads both computation and communication evenly over the processors. The program can partition hypergraphs with integer vertex weights and uniform hyperedge costs, but it is primarily intended as a matrix partitioner. \cite{mondriaan}} With its option \texttt{-SquareMatrix\_DistributeVectorsEqual=yes} we can force input and output vector to have the same distribution.
+Every iteration of Algorithm~\ref{alg:seqcg} has 5 vector updates, two inner products and one matrix-vector multiplication. Finding good distributions of $A$, $x$ and $b$ is an NP-hard problem so we will have to resort to heuristic methods. To find these edistributions, we can use Mondriaan.\footnote{Mondriaan is a sequential program written in C that can be used to partition a rectangular sparse matrix, an input vector, and an output vector for parallel sparse matrix-vector multiplication. The program is based on a recursive bipartitioning algorithm that cuts the matrix horizontally and vertically, in a manner resembling some of the famous Mondriaan paintings. The algorithm is multilevel, hypergraph-based, and two-dimensional. It reduces the amount of communication and it spreads both computation and communication evenly over the processors. The program can partition hypergraphs with integer vertex weights and uniform hyperedge costs, but it is primarily intended as a matrix partitioner. \cite{mondriaan}} With its option \texttt{-SquareMatrix\_DistributeVectorsEqual=yes} we can force input and output vector to have the same distribution. We chose not to alter the default load imbalance option of $\epsilon = 0.03$.\footnote{Later inspection using the formula provided in \cite[p.~189]{biss04} -- $\epsilon = Vg/(2nz(A))$ being optimal for the matrix-vector product -- revealed that the optimal value (which of course depends on $p$ and $A$) lies around $0.2$. The total iteration time was however not that much faster, so we opted not to rerun all tests.}
 
 The resulting parallel algorithm is in appearance almost exactly as Algorithm~\ref{alg:seqcg}, so we will not rewrite this. As the vector updates can be done locally without communication, BLAS routines were used (just as in the sequential algorithm). The big changes are made in computation of the inner product and the matrix-vector product. The \texttt{bspmv} algorithm found in \cite[Alg.~4.5]{biss04} was used without alterations, but the \texttt{bspip} algorithm \cite[Alg.~1.1]{biss04} was found unusable as this assumed a cyclical distribution. See Algorithm~\ref{alg:ip} for a parallel inner product algorithm that only assumes that both vectors have the same distribution. The beauty of this algorithm is that no processor has to know the distribution, as long as it has its own vector components stored as a smaller vector.
 
@@ -273,12 +273,17 @@ We first calculate the BSP cost of the parallel algorithm per iteration, using A
 
 Looking at Algorithm~\ref{alg:ip}, each inner product yields $2nv_s - 1$ operations for Superstep 1, $pg$ operations for Superstep 2 and $p-1$ operations for Superstep 3, with 2 synchronizations in between for a total of $2(2nv_s - 1 + p-1 + pg + 2l)$ inner product operations per iteration.
 
-TODO: uitzoeken of die load imbalance ook voor de vector distributies geldt
+We found in \cite[p.~189]{biss04} that the matrix-vector product using a Mondriaan distribution yields a total BSP cost of $2(1+\epsilon)nz(A)/p + Vg/p + 4l$ operations. We have one such matrix-vector product per iteration.
 
-TODO MV
+Summing everything together, we get a total BSP cost per iteration of
+\[
+  11nv_s - 4 + p(2+2g) + (Vg + 2 (1+\epsilon)nz(A))/p + 8l.
+\]
+
+TODO wat nu? dit relateren aan het aantal iteraties dat nodig is? Wordt snel sketchy
 
 \subsection{Parallel CG with diagonal preconditioner}
-blabla
+TODO
 
 \section{Testing our parallel CG}
 To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in the book: create a random sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
@@ -296,7 +301,20 @@ positive definite matrix. Finally, to add some more randomness to the diagonal, 
 
 This parameter $\delta$ gives us an indication for the `sparseness' of the matrix.\footnote{It is actually not the density but the amount of non-zero entries per TODO row/column that is important to the complexity of the matrix-vector product \cite[p.~178]{biss04}. As we are dealing with a square matrix, these two quantities are actually equivalent.} With this method we can generate a variety of matrices
 for different combinations of $n$ and $\delta$, which gives insight in the performance of our parallel implementation.
-\subsection{Profiling}
+
+\subsection{Benchmark of Cartesius}
+\label{sec:cart}
+We ran \texttt{bspbench} with $n=100$, $h=256$ and $p \in \{1, \ldots, 64\}$ to get an idea of values for $r$, $g$ and $l$ for processor counts and get an idea of the scaling properties of Cartesius.
+
+We found the average value of $\bar r = 9157$ Mflop/s. See Figure~\ref{fig:cart} for values of $g$ and $l$ as function of $p$. We see a sharp increase in both $g$ and $l$ at $p=24$ and another one at $p=32$. These have to do with the hardware of Cartesius: under 24 cores is done on a shared-memory system, where communication is cheap. At $p=32$, TODO waarom is dit hoger dan?
+
+\begin{figure}
+  \includegraphics[width=0.49\linewidth]{cartg.png}
+  \includegraphics[width=0.49\linewidth]{cartl.png}
+  \caption{Results of running \texttt{bsbench} on a thin node of Cartesius with $n=100$, $h=256$. $x$-axis: $p \in \{1, \ldots, 64\}$. $y$-axis: left -- $g$, right -- $l$.}
+  \label{fig:cart}
+\end{figure}
+
 \subsection{Scaling tests}
 With these matrices in hand, we can perform scaling tests by varying 
 \[ p \in \{1, 2, 4, \ldots, 64\}, \quad n \in \{64, 128, \ldots, 4096 \}, \quad \delta \in \{0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2\} \]
@@ -321,7 +339,7 @@ We quickly realized that time spent doing local operations $t_l$ and computing g
 \begin{figure}
   \includegraphics[width=0.49\linewidth]{tlt.png}
   \includegraphics[width=0.49\linewidth]{tgt.png}
-  \caption{Percentage of total time spent doing local computations (left) and finding the global solution from the local components (right).}
+  \caption{Percentage of total time spent doing local computations (left) and finding the global solution from the local components (right) for our test matrices.}
   \label{fig:nonsig}
 \end{figure}
 
@@ -333,7 +351,13 @@ One other thing we noticed right away is the fact that for our class of matrices
   \label{fig:quotient}
 \end{figure}
 
-Taking $n \in \{2048, 4096\}$ and $\delta \in \{0.1, 0.2\}$, we get a few sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these four matrices yields Figure~\ref{fig:samples}. We see that the optimal computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ as $t_l \approx 0$ by Figure~\ref{fig:nonsig}) seems to lie somewhere between $p=8$ and $p=32$. This result can be explained by the following fact: the systems we used are still too small to scale to a non-shared-memory system. As the Cartesius hardware uses nodes with 12 cores and 2 threads per core, for $p \leq 24$, everything is shared-memory. The solution for this would be to create larger systems. This was however not really possible by the limitations of Mondriaan.
+Taking $n \in \{2048, 4096\}$ and $\delta \in \{0.1, 0.2\}$, we get a few sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these four matrices yields Figure~\ref{fig:samples}. We see that the optimal computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ as $t_l \approx 0$ by Figure~\ref{fig:nonsig}) seems to lie somewhere between $p=8$ and $p=32$. The most likely option is around $p=24$, as this is the highest amount of processor cores that is still on one shared-memory system (see \S \ref{sec:cart}). We can overcome this by increasing the computational effort every processor has to do (increasing $n$ and $nz(A)$), but this proved hard, as Mondriaan takes quite some time to generate the distributions already.
+
+If we look at $t_{mv}$ and $t_{ip}$ separately, we see that for $p=1$, $t_{mv}$ scales linearly with $nz(A)$ (as we concluded before). We also see that for $p=64$, $t_{ip}$ is almost the same across the different matrices. This indicates that the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from the first homework exercise. \cite{TODOHUISWERK} In this exercise, we found that if
+\[
+  (p - 5\log_2 p) + (p + \log_2 p - 1)g + (2-\log_2 p)l > 0
+\]
+the new strategy is better. A quick inspection yields that this is true for $p \leq 4$ and \emph{very} false (values being in the order of negative millions), indicating that we won't have to try.
 
 \begin{figure}
   \includegraphics[width=0.48\linewidth]{n2048d0_1mvip.png}
