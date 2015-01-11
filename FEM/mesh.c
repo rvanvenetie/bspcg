@@ -66,32 +66,32 @@ int write2meshfile( FILE *fp, mesh_dist *mesh, int distributed) {
   return 0;
 }
 
-mesh_dist *readfrommeshfile( FILE *fp) {
+mesh_dist readfrommeshfile( FILE *fp) {
   int distributed = 0;
-  mesh_dist *mesh = malloc( sizeof( mesh_dist));
+  mesh_dist mesh;
   char buf[256];
   fscanf( fp, "%%%s\n", buf);
   if( strstr( buf, "distributed") != NULL)
     distributed = 1;
-  fscanf( fp, "%d %d", &mesh->n_vert, &mesh->n_tri);
+  fscanf( fp, "%d %d", &mesh.n_vert, &mesh.n_tri);
   if( distributed)
-    fscanf( fp, " %d", &mesh->P);
+    fscanf( fp, " %d", &mesh.P);
   fscanf( fp, "\n");
-  mesh->x = malloc( mesh->n_vert * sizeof( double));
-  mesh->y = malloc( mesh->n_vert * sizeof( double));
-  mesh->b = malloc( mesh->n_vert * sizeof( int));
+  mesh.x = malloc( mesh.n_vert * sizeof( double));
+  mesh.y = malloc( mesh.n_vert * sizeof( double));
+  mesh.b = malloc( mesh.n_vert * sizeof( int));
 
-  mesh->t = malloc( 3 * mesh->n_tri * sizeof( int));
-  mesh->p = malloc( mesh->n_tri * sizeof( int));
+  mesh.t = malloc( 3 * mesh.n_tri * sizeof( int));
+  mesh.p = malloc( mesh.n_tri * sizeof( int));
   
-  for( int i = 0; i < mesh->n_vert; i++) {
-    fscanf( fp, "%lg %lg %d\n", &mesh->x[i], &mesh->y[i], &mesh->b[i]);
+  for( int i = 0; i < mesh.n_vert; i++) {
+    fscanf( fp, "%lg %lg %d\n", &mesh.x[i], &mesh.y[i], &mesh.b[i]);
   }
 
-  for( int i = 0; i < mesh->n_tri; i++) {
-    fscanf( fp, "%d %d %d", &mesh->t[i][0], &mesh->t[i][1], &mesh->t[i][2]);
+  for( int i = 0; i < mesh.n_tri; i++) {
+    fscanf( fp, "%d %d %d", &mesh.t[i][0], &mesh.t[i][1], &mesh.t[i][2]);
     if( distributed)
-      fscanf( fp, " %d", &mesh->p[i]);
+      fscanf( fp, " %d", &mesh.p[i]);
     fscanf( fp, "\n");
   }
 
@@ -147,23 +147,25 @@ matrix_s *create_hypergraph_from_mesh( mesh_dist *mesh) {
   return hypergraph;
 }
 
+#ifdef FOKJOE
 int main( void) {
   FILE *mfile = fopen( "lshaped.m", "r");
   FILE *mtxfile = fopen( "lshaped.mtx", "w");
   FILE *vfile = fopen( "lshaped.mtx-v2", "r");
-  FILE *dmfile = fopen( "lshaped.dm", "w");
+  FILE *dmfile = fopen( "lshaped.m-P2", "w");
 
-  mesh_dist *mesh = readfrommeshfile( mfile);
-  matrix_s *hypergraph = create_hypergraph_from_mesh( mesh);
-  write2mtx( mtxfile, mesh, hypergraph);
+  mesh_dist mesh = readfrommeshfile( mfile);
+  matrix_s *hypergraph = create_hypergraph_from_mesh( &mesh);
+  write2mtx( mtxfile, &mesh, hypergraph);
 
   //now run Mondriaan on this mtx file
   exit(0);
 
-  mesh->P = 2;
-  readfromvfile( vfile, mesh);
+  mesh.P = 2;
+  readfromvfile( vfile, &mesh);
 
-  write2meshfile( dmfile, mesh, 1); //write distributed m file
-  mesh_dist *new_mesh = readfrommeshfile( dmfile);
+  write2meshfile( dmfile, &mesh, 1); //write distributed m file
+  mesh_dist new_mesh = readfrommeshfile( dmfile);
   return 0;
 }
+#endif

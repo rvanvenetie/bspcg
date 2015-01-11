@@ -25,7 +25,7 @@ typedef struct {
 int write2meshfile( FILE *fp, mesh_dist *mesh, int distributed);
 
 //read mesh file into struct
-mesh_dist *readfrommeshfile( FILE *fp);
+mesh_dist readfrommeshfile( FILE *fp);
 
 //write mesh info mtx file (to go into Mondriaan)
 int write2mtx( FILE *fp, mesh_dist *mesh, matrix_s *hypergraph);
