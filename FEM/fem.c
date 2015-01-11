@@ -81,26 +81,30 @@ typedef long long unsigned int proc_set;
  
 /* Data structure for the data of each processor */
 typedef struct {
-  /*
-   * Vertices used in this processor. First we store the shared
-   * vertices, then we save all the vertices we `own'.
-   */
+	/*
+	 * Vertices used in this processor. We have the following order:
+	 * 1) Shared vertices 
+	 * 2) Owned vertices
+	 * 3) Boundary vertices (all the vertices lying on the boundary
+	 */
   double *x, *y;			 //Vertices 
-  int * b;						 //Indicates whether this vertex lies on the boundary
-  int n_vert;					 //Length of the (local) array
-	int n_vert_total;    //Total length of vertices in the system
+	int n_shared;        //Amount of shared vertices (not bound)
+	int n_own;           //Amount of owned vertices (not bound)
+	int n_bound;         //Amount of vertices on the boundary
+	int n_vert;          //Total amount of vertices (n_shared + n_own + n_bound)
 
-
-  int n_shared;				 //Amount of shared vertices
+	int dof;					 	 //Degrees of freedom, in our case n_shared + n_own
 	proc_set * p_shared; //Processor sets for the shared vertices
 
+	int n_vert_total;    //Total amount of vertices in the system
   int * i_glob;				 //Global index that corresponds to the local vertex
 	int * glob2local;    //Lazy way to convert global to local indices 
+
   //int ** i_shared;		 //Array of (p,i_loc), giving the local index on processor p for this vertex
 
   /* Triangles on this processor. Should be LOCAL indices */
-	triangle * t;
   int n_tri; 
+	triangle * t;
 
   /* FEM matrix for this processor */
   matrix_s mat;
@@ -156,9 +160,9 @@ void gen_element_matrix(double * res, double *x, double *y, triangle t) {
 }
 
 
-matrix_s gen_fem_mat(double *x, double *y, int n_vert,
+matrix_s gen_fem_mat(double *x, double *y, int dof,
 		                 triangle * t, int n_tri) {
-	matrix_s result = mat_init(n_vert, n_vert);
+	matrix_s result = mat_init(dof, dof);
 	for (int k = 0; k < n_tri; k++) {
 		//Calculate element matrix for triangle t[k]
 		double el_mat[3*3];
@@ -217,7 +221,7 @@ int proc_owner(proc_set set)  {
 	 the amount of owned/shared vertices per processor */
 void mesh_proc_sets(int p, mesh_dist * mesh,
 									  int * n_tri_proc,
-		                proc_set * vert_proc, int * n_vert_proc, int * n_shared_proc) {
+		                proc_set * vert_proc, int * n_own_proc, int * n_shared_proc, int * n_bound_proc) {
 		 						
 	//Loop over triangles to determine processor sets and amount of tri per proc
 	for (int i = 0; i < mesh->n_tri; i++)  {
@@ -229,21 +233,26 @@ void mesh_proc_sets(int p, mesh_dist * mesh,
 	}
   /*
 	 * For each processor we now calculate:
-	 *  1) The total amount of vertices
-	 *  2) The amount of vertices they share
+	 *  1) Amount of shared vertices (non bound)
+	 *  2) Amount of owned verices (non bound)
+	 *  3) Amount of boundary vertices  (shared/own)
 	 */
 
 	for (int v = 0; v < mesh->n_vert; v++)
 	{
 		int v_shared = (proc_count(vert_proc[v]) > 1); 
+		int v_bound  = (mesh->b[v]);
 
 		//Loop over all the processors using this vertex
 		int proc = -1;
 		while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 		{
-			n_vert_proc[proc]++; 		
-			if (v_shared)
-				n_shared_proc[proc]++; //Shared vertex as well
+			if (v_bound)
+				n_bound_proc[proc]++;
+			else if (v_shared)
+				n_shared_proc[proc]++;
+			else
+				n_own_proc[proc]++;
 		}
 	}
 }
@@ -269,49 +278,56 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 		exit(0);
 	}
 	bsp_fem_data result;
-	bsp_push_reg(&result.n_vert,   SZINT);
-	bsp_push_reg(&result.n_vert_total, SZINT);
+	bsp_push_reg(&result.n_own,   SZINT);
 	bsp_push_reg(&result.n_shared, SZINT);
+	bsp_push_reg(&result.n_bound, SZINT);
 	bsp_push_reg(&result.n_tri,    SZINT);
+	bsp_push_reg(&result.n_vert_total, SZINT);
 	bsp_sync();
 
 	proc_set * vert_proc = NULL; 
-	int *    n_vert_proc = NULL;
+	int *     n_own_proc = NULL;
 	int *	 n_shared_proc = NULL;
+	int *   n_bound_proc = NULL;
 	int * 	  n_tri_proc = NULL;
 	if (s == 0) {
 		vert_proc					= calloc(sizeof(proc_set), mesh->n_vert); 
-		n_vert_proc				= calloc(sizeof(int), p);
+		n_own_proc				= calloc(sizeof(int), p);
 		n_shared_proc     = calloc(sizeof(int), p);
+		n_bound_proc			= calloc(sizeof(int), p);
 		n_tri_proc        = calloc(sizeof(int), p);
 
 		//Calculate processor sets, amount of shared/owned vertices and amount of triangles
-		mesh_proc_sets(p, mesh, n_tri_proc, vert_proc, n_vert_proc, n_shared_proc);
+		mesh_proc_sets(p, mesh, n_tri_proc, vert_proc, n_own_proc, n_shared_proc, n_bound_proc);
 		for (int proc = 0; proc < p; proc++)
 		{
-			bsp_put(proc, &n_vert_proc[proc],   &result.n_vert  , 0, SZINT);
+			bsp_put(proc, &n_own_proc[proc],    &result.n_own   , 0, SZINT);
 			bsp_put(proc, &n_shared_proc[proc], &result.n_shared, 0, SZINT);
+			bsp_put(proc, &n_bound_proc[proc], &result.n_bound  , 0, SZINT);
 			bsp_put(proc, &n_tri_proc[proc],    &result.n_tri,    0, SZINT);
-			bsp_put(proc, &mesh->n_vert, &result.n_vert_total, 0, SZINT);
+			bsp_put(proc, &mesh->n_vert   , &result.n_vert_total, 0, SZINT);
 		}
 	}
 	bsp_sync();
 	//Every processor now knows the amount of vertices (shared/owned) and amount of triangles it holds.
-	bsp_pop_reg(&result.n_vert);
-	bsp_pop_reg(&result.n_vert_total);
+	bsp_pop_reg(&result.n_own);
 	bsp_pop_reg(&result.n_shared);
+	bsp_pop_reg(&result.n_bound);
 	bsp_pop_reg(&result.n_tri);
+	bsp_pop_reg(&result.n_vert_total);
+
+	result.n_vert = result.n_shared + result.n_own + result.n_bound;
+	result.dof    = result.n_shared + result.n_own;
 
 	result.x			  = malloc(sizeof(double)     * result.n_vert);
 	result.y			  = malloc(sizeof(double)     * result.n_vert);
-	result.b        = malloc(sizeof(int)        * result.n_vert);
+
 	result.i_glob   = malloc(sizeof(int)        * result.n_vert);
 	result.p_shared = malloc(sizeof(proc_set)   * result.n_shared);
 	result.t			  = malloc(sizeof(result.t[0])* result.n_tri);
 
   bsp_push_reg(result.x, SZDBL * result.n_vert);
   bsp_push_reg(result.y, SZDBL * result.n_vert);
-	bsp_push_reg(result.b, SZINT * result.n_vert);
 	bsp_push_reg(result.i_glob, SZINT * result.n_vert);
 	bsp_push_reg(result.p_shared, sizeof(proc_set) * result.n_shared);
 	bsp_push_reg(result.t, sizeof(result.t[0]) * result.n_tri);
@@ -329,15 +345,14 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 		for (int i = 0; i < mesh->n_tri; i++)
 			bsp_put(mesh->p[i], &mesh->t[i], result.t, tri_cntr[i]++, sizeof(result.t[0]));
 
-		//First push shared vertices
+		//First push shared vertices (not bound)
 		for (int v = 0; v < mesh->n_vert; v++)
-			if (proc_count(vert_proc[v]) > 1) { //Shared vertex
+			if (!mesh->b[v] && proc_count(vert_proc[v]) > 1) { //Shared vertex
 				int proc = -1;
 				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 				{
 					/* All the processors sharing vertex v need:
 					 * - The coordinates of v
-					 * - The processor set
 					 * - Boundary vertex
 					 * - The global index of v (given by v itself, confusing huh ;-))
 					 */
@@ -345,7 +360,6 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
 					bsp_put(proc, &vert_proc[v], result.p_shared, vert_cntr[proc], SZDBL);
 					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
-					bsp_put(proc, &mesh->b[v],            result.b, vert_cntr[proc], SZINT);
 					vert_cntr[proc]++;
 			}
 		}
@@ -357,15 +371,26 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 				bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc], SZDBL);
 				bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
 				bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
-				bsp_put(proc, &mesh->b[v],            result.b, vert_cntr[proc], SZINT);
 				vert_cntr[proc]++;
+			}
+
+		//Push boundary vertices
+		for (int v = 0; v < mesh->n_vert; v++)
+			if (mesh->b[v]) { //Boundary vertex
+				int proc = -1;
+				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
+				{
+					bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc], SZDBL);
+					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
+					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
+					vert_cntr[proc]++;
+				}
 			}
 	}
 	bsp_sync();
-	/* Every processor has all the elements. Only thing left to figure out glob2local indexing */
+	/* Every processor has all the elements. Now convert global indexing to local indexing */
 	bsp_pop_reg(result.x);
 	bsp_pop_reg(result.y);
-	bsp_pop_reg(result.b);
 	bsp_pop_reg(result.i_glob);
 	bsp_pop_reg(result.p_shared);
 	
@@ -381,7 +406,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 			result.t[i][v] = result.glob2local[result.t[i][v]];
 
 	/* Memory structure is now all set, lets produce the FEM matrix */
-	result.mat = gen_fem_mat(result.x, result.y, result.n_vert, 
+	result.mat = gen_fem_mat(result.x, result.y, result.dof,
 			                     result.t, result.n_tri);
 
 	/* We are DONE! */
