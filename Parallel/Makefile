@@ -4,8 +4,8 @@ CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
 IDIR = ../libs
 LFLAGS=  -lpthread -lm  #-lrt
 
-ifeq ($(UNAME),raymond)
-	CC = mpicc
+ifeq ($(UNAME),bissstud)
+	CC = mpiicc
 	LFLAGS += -lbsponmpi
 else
 	CC = gcc
