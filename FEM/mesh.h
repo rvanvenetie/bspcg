@@ -32,4 +32,5 @@ int write2mtx( FILE *fp, mesh_dist *mesh, matrix_s *hypergraph);
 
 //read Mondriaan output and combine with existing mesh struct
 int readfromvfile( FILE *fp, mesh_dist *mesh);
+matrix_s *create_hypergraph_from_mesh( mesh_dist *mesh);
 #endif

@@ -26,7 +26,18 @@ fem: $(OBJ)
 bsp:
 	cd $(IDIR); make all;
 
+mesh.o: mesh.c
+	$(CC) -c $(CFLAGS) $<
+
+m2mtx: mesh.o
+	$(CC) $(CFLAGS) -o m2mtx mesh.o m2mtx.c
+
+mtx2dm: mesh.o
+	$(CC) $(CFLAGS) -o m2mtx mesh.o mtx2dm.c
+
 clean:
 	rm -f *.o
 	rm -f main
+	rm -f m2mtx
+	rm -f mtx2dm
 	cd $(IDIR); make clean;
