@@ -15,7 +15,7 @@ matrix_s mat_init(int n, int m) {
 }
 matrix_s * mat_create( int n, int m) {
   matrix_s *mat = malloc( sizeof( matrix_s));
-	mat = mat_init(n,m);
+	*mat = mat_init(n,m);
 	return mat;
 }
 
@@ -67,15 +67,18 @@ int readfromvfile( FILE *fp, mesh_s *mesh) {
   return 0;
 }
 
+#ifdef FOKJOE
+#define NVERTS 5
+#define NTRIS 4
 int main( void) {
-  const int nverts = 5;
-  const int ntris = 4;
+  const int nverts = NVERTS;
+  const int ntris = NTRIS;
   const int P = 2; //number of processors
-  double x[nverts] = {0, 1, 1, 0, 0.5};            //x-values for vertices
-  double y[nverts] = {0, 0, 1, 1, 0.5};            //y-values for vertices
-  int b[nverts] = {1, 1, 1, 1, 0};            //boolean boundary for vertices
-  int t[ntris*3] = {4, 0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0};     //triangles
-  int d[ntris] = {-1};
+  double x[NVERTS] = {0, 1, 1, 0, 0.5};            //x-values for vertices
+  double y[NVERTS] = {0, 0, 1, 1, 0.5};            //y-values for vertices
+  int b[NVERTS] = {1, 1, 1, 1, 0};            //boolean boundary for vertices
+  int t[NTRIS*3] = {4, 0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0};     //triangles
+  int d[NTRIS] = {-1};
 
   mesh_s mesh = {
     .nverts = nverts,
@@ -89,12 +92,12 @@ int main( void) {
   };
 
   //create hypergraph matrix
-  matrix_s *hypergraph = create( ntris, nverts);
+  matrix_s *hypergraph = mat_create( ntris, nverts);
   for( int i = 0; i < nverts; i++) {
     for( int j = 0; j < ntris; j++) {
       for( int k = 0; k < 3; k++) {
         if( t[3*j+k] == i)
-          append( hypergraph, i, j, 1);
+          mat_append( hypergraph, i, j, 1);
       }
     }
   }
@@ -109,3 +112,4 @@ int main( void) {
   }
   return 0;
 }
+#endif

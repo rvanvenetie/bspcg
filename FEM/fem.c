@@ -116,7 +116,7 @@ void gen_element_matrix(double * res, double *x, double *y, triangle t) {
   //Area triangle times 2
   double area = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
   //Calculate the upper part of Ak. Ak \gets area / 2.0 * D.T * D
-  cblas_dsyrk(CblasRowMajor, CblasUpper, CblasTrans, 3, 2, area / 2.0, D_mat, 2, 0, res, 3);
+  //cblas_dsyrk(CblasRowMajor, CblasUpper, CblasTrans, 3, 2, area / 2.0, D_mat, 2, 0, res, 3);
   //res should now hold the correct values??????
   for (int i = 0; i < 3; i++)
    for (int j = 0; j <= i; j++)
