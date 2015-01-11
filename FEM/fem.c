@@ -255,6 +255,15 @@ void mesh_proc_sets(int p, mesh_dist * mesh,
 		}
 	}
 }
+void fem_data_free(bsp_fem_data * fem) {
+	free(fem->x);
+	free(fem->y);
+	free(fem->p_shared);
+	free(fem->i_glob);
+	free(fem->glob2local);
+	free(fem->t);
+	mat_free(&fem->mat);
+}
 
 bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	/*
@@ -491,7 +500,7 @@ double bsp_fem_ip(int p, int s,  //Processor information
 		if (s == proc_owner(fem->p_shared[i])) //We own this shared vertex
 			inprod_local += fem->x[i] * fem->y[i];
 
-	for (int i = fem->n_shared; i < fem->n_shared + fem->n_own; i++) //Loop over owned vertices
+	for (int i = fem->n_shared; i < fem->dof; i++) //Loop over owned vertices
 		inprod_local += fem->x[i] * fem->y[i];
 
   //Put the local value in all the processors
@@ -596,54 +605,26 @@ void bspfem() {
 			print_mesh_dist(mesh_total);
 	}
 	fem = bsp_fem_init(s,p, &mesh_total);
+	if (s == 0)
+		mesh_free(&mesh_total);
 
 	if (use_debug)
 		print_fem_data(s, fem);
-	bsp_sync();
-	/* Matrix, vector dist and b is loaded */
-	/* Loading phase done, bsp_sync, add timer?*/
-
-	/* Initalize bsp_mv */
-	/*
-  srcprocv  = vecalloci(mat.ncols);
-  srcindv   = vecalloci(mat.ncols);
-  destprocu = vecalloci(mat.nrows);
-  destindu  = vecalloci(mat.nrows);
-  bspmv_init(p, s, mat.n, mat.nrows, mat.ncols,
-             dis.nv, dis.nv, mat.rowindex, mat.colindex,
-	     dis.vindex, dis.vindex, 
-	     srcprocv, srcindv, destprocu, destindu);
-	if (b_mode != B_LOAD) { //Not loaded from file, initialize as a vector of ones
-		//Initialize b to be a vector of ones
-    b = vecallocd(dis.nv);
-    if( b_mode == B_AX) {
-      double *x_temp = vecallocd(dis.nv);
-      for( int i = 0; i < dis.nv; i++) 
-        x_temp[i] = 1;
-      bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
-            mat.val, mat.inc,
-            srcprocv, srcindv, destprocu, destindu,
-            dis.nv, dis.nv, x_temp, b);
-      vecfreed( x_temp);
-    } else if( b_mode == B_ONES) {
-      for( int i = 0; i < dis.nv; i++) 
-        b[i] = 1;
-    } else if( b_mode == B_RAND) {
-      for( int i = 0; i < dis.nv; i++) 
-        b[i] = ((double)rand())/RAND_MAX;
-    }
-  }
+	/* FEM matrix is loaded, now give the RHS of the equation TODO: BETTER b */
+	b = vecallocd(fem.dof);
+	for (int i = 0; i < fem.dof; i++)
+		b[i] = 1;
 
   int k = 0; //Iterations
   //Allocate vectors used in algorithm, b is already allocated
-  r = vecallocd(dis.nv); 
-  u = vecallocd(dis.nv);
-  x = vecallocd(dis.nv);
-  w = vecallocd(dis.nv);
+  r = vecallocd(fem.dof); 
+  u = vecallocd(fem.dof);
+  x = vecallocd(fem.dof);
+  w = vecallocd(fem.dof);
 
   //u and w are initialized in the algorithm.
   //Initial value of x = 0, r = b - Ax = b.
-  for (int i = 0; i < dis.nv; i++) {
+  for (int i = 0; i < fem.dof; i++) {
     x[i] = 0;
     u[i] = 0;
     r[i] = b[i];
@@ -651,16 +632,14 @@ void bspfem() {
 
   //Rho used in algo, initial rho = <r,r> = <b,b>
   double rho, rho_old;
-  rho = bspip_dist(p,s,r,r, dis.nv);
+	rho = bsp_fem_ip(p,s,r,r, &fem);
 
   //We store |b|^2 to calculate the relative norm of r
   //|b|^2 = <b,b> = rho
   double normbsq = rho;
 
   time_init = bsp_time();
-	*/
 	/* All initalization is done, start the main loop */
-	/*
   while( rho > eps*eps*normbsq && k < kmax) {
     double beta, gamma, alpha;
     DEBUG("Iteration %d, rho = %g\n", k + 1, rho);
@@ -669,38 +648,35 @@ void bspfem() {
       // u \gets r + beta u 
 			
 			// u \gets \beta u
-      vec_scale(dis.nv, beta, u);
+      vec_scale(fem.dof, beta, u);
     }
 
 		// u \gets r + u
-    vec_axpy(dis.nv, 1.0, r, u); 
+    vec_axpy(fem.dof, 1.0, r, u); 
 
     // w \gets Au
     time_before_mv = bsp_time();
-    bspmv(p,s, mat.n, mat.nz, mat.nrows, mat.ncols, 
-					mat.val, mat.inc,
-					srcprocv, srcindv, destprocu, destindu,
-					dis.nv, dis.nv, u, w);
+		bsp_fem_mv(s, &fem,w, u);
     time_mv += bsp_time() - time_before_mv;
 
     // \gamma \gets <u, w>
     time_before_ip = bsp_time();
-    gamma = bspip_dist(p,s, u,w, dis.nv);
+		gamma = bsp_fem_ip(p,s, u,w, &fem);
     time_ip += bsp_time() - time_before_ip;
 
     alpha = rho/gamma;
 
     //  x \gets x + alpha u
-    vec_axpy(dis.nv, alpha, u, x); 
+    vec_axpy(fem.dof, alpha, u, x); 
 
     //  r \gets r - alpha w
-    vec_axpy(dis.nv, - alpha, w, r); 
+    vec_axpy(fem.dof, - alpha, w, r); 
 
     rho_old = rho;
     // \rho \gets <r ,r>
 
     time_before_ip = bsp_time();
-    rho = bspip_dist(p,s, r,r, dis.nv);
+		rho = bsp_fem_ip(p,s, r,r, &fem);
     time_ip += bsp_time() - time_before_ip;
 
     k++;
@@ -713,7 +689,7 @@ void bspfem() {
   } else {
     DEBUG("CG stopped, maximum iterations (%i) reached. rho = %g\n", k, rho);
   }
-	*/
+	
 	/*
 	 * We now give processor zero the solution vector.
 	 * Note that we probably do not want to do this in the real
@@ -728,7 +704,7 @@ void bspfem() {
 	bsp_push_reg(x_glob, dis.n*SZDBL);
 	bsp_sync();
 
-	for (int i = 0; i < dis.nv; i++)
+	for (int i = 0; i < fem.dof; i++)
 	{
 		int index_glob = dis.vindex[i];
 		bsp_put(0, &x[i], x_glob, index_glob * SZDBL, SZDBL);
@@ -737,22 +713,18 @@ void bspfem() {
 	bsp_sync();
 	bsp_pop_reg(x_glob);
 	vecfreed(x_glob);
-
+	*/
   vecfreed(u);
   vecfreed(x);
   vecfreed(r);
   vecfreed(w);
   vecfreed(b);
-  vecfreei(srcprocv);
-  vecfreei(srcindv);
-  vecfreei(destprocu);
-  vecfreei(destindu);
-
   time_total = bsp_time();
 
 	if (use_debug) {
-		if (s == 0)
+/*		if (s == 0)
 			printf("mat: %s\np: %d\nn: %d\nb_mode: %d\nk: %d\n", basename(matbuffer), p, mat.n, b_mode, k);
+			*/
 		printf( "s: %d\n"
 						"\ttime_init: %g\n"
 						"\ttime_mv: %g\n"
@@ -762,6 +734,7 @@ void bspfem() {
 							, s, time_init, time_mv, time_ip, time_done, time_total);
 	}
 	if (s == 0 && use_time) {
+		/*
 		double time_iter = time_done - time_init;
 		double time_glob = time_total - time_done;
 		double time_it_local = time_iter - (time_mv + time_ip);
@@ -771,8 +744,9 @@ void bspfem() {
 		//mat_name, p,      mat_n,  mat_nzA, density, k,  time_init, time_iter, time_glob, time_total time_it_local, time_mv, time_ip
 		printf("%s" "\t%d" "\t%d" "\t%d"    "\t%6f"	"\t%d"	"\t%6f"		 "\t%6f" 		"\t%6f"	 "\t%6f"		"\t%6f"					"\t%6f"   "\t%6f\n",
 				basename(matbuffer), p, mat.n, mat.nzA,density,k,time_init,time_iter,time_glob,time_total, time_it_local,time_mv,time_ip);
+				*/
   }
-	*/
+	fem_data_free(&fem);
   bsp_end();
 }
 

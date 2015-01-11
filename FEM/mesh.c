@@ -30,6 +30,16 @@ matrix_s * mat_create( int n, int m) {
 	return mat;
 }
 
+void mat_free(matrix_s * mat) {
+	free(mat->I);
+	free(mat->J);
+	free(mat->val);
+	mat->I = NULL;
+	mat->J = NULL;
+	mat->val = NULL;
+	mat->lennz = mat->nz = 0;
+}
+
 int mat_append( matrix_s *mat, int i, int j, double val) {
   if( mat->lennz == mat->nz) {
     mat->I = realloc( mat->I, 2*mat->lennz * sizeof( int));
@@ -66,6 +76,13 @@ int write2meshfile( FILE *fp, mesh_dist *mesh, int distributed) {
   return 0;
 }
 
+void mesh_free(mesh_dist * mesh) {
+	free(mesh->x);
+	free(mesh->y);
+	free(mesh->b);
+	free(mesh->t);
+	free(mesh->p);
+}
 mesh_dist readfrommeshfile( FILE *fp) {
   int distributed = 0;
   mesh_dist mesh;

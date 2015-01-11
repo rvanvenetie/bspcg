@@ -23,6 +23,10 @@ typedef struct {
 
 matrix_s mat_init(int n, int m);
 int mat_append( matrix_s *mat, int i, int j, double val);
+void mat_free(matrix_s * mat);
+
+
+void mesh_free(mesh_dist * mesh);
 
 //write mesh to mesh file, either distributed or not
 int write2meshfile( FILE *fp, mesh_dist *mesh, int distributed);
