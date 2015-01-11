@@ -387,10 +387,96 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	/* We are DONE! */
 	bsp_sync();
 }
+//Symmetric sparse matrix vector multiplication v = Au
+void ssmv(double * v, matrix_s * mat,  double * u) {
+	for (int k = 0; k < mat->n; k++)
+		v[k] = 0;
 
+	for (int k = 0; k < mat->nz; k++) {
+		int i = mat->I[k];
+		int j = mat->J[k];
+		v[i] += mat->val[k] * u[j];
+		if (i != j)
+			v[j] += mat->val[k] * u[i];
+	}
+}
 
+//Calculate v = Au using our FEM-stuff
+void bsp_fem_mv(int s, bsp_fem_data * fem, double * v, double * u) {
+	int tagsz= SZINT;
+	bsp_set_tagsize(&tagsz);
+	bsp_sync();
 
+	ssmv(v, &fem->mat, u);
+	/*
+	 * For vertices shared by other processors we must communicate.
+	 * We therefore send the local value to all the shared processors with
+	 * the global index as tag
+	 */
+	for (int k = 0; k < fem->n_shared; k++) {
+		int proc = -1;
+		while ((proc = proc_next(fem->p_shared[k], proc+1)) != -1) 
+			if (proc != s) 
+				bsp_send(proc, &fem->i_glob[k], &v[k], SZDBL);
+	}
+	bsp_sync();
+	int status, tag;
+	double tmp_val;
+  bsp_get_tag(&status, &tag);
+	while (status != -1) { //Process all the messages
+		bsp_move(&tmp_val, SZDBL);
+		//Tag holds the global index, tmp_val the value
+		v[fem->glob2local[tag]] += tmp_val;
+		bsp_get_tag(&status, &tag);
+	}
+	//Done!
+}
 
+double bsp_fem_ip(int p, int s,  //Processor information  
+    double * x, double * y,      //Vector data
+    bsp_fem_data * fem)          //Distribution information
+{
+  /*
+   * Every processor calculates its own local inner product.
+   * It then puts this value in all the other processors.
+   * After which every processor calculates the total inner
+   * product.
+	 *
+	 * We explicitely need to exclude vertices we shared, but that
+	 * we do not own.
+   */
+  double inprod_local;
+  double * inprod;
+  inprod = vecallocd(p);
+  bsp_push_reg(inprod, p * SZDBL);
+  bsp_sync();
+
+  //Calculate local inproduct
+  inprod_local = 0;
+	for (int i = 0; i < fem->n_shared; i++)
+		if (s == proc_owner(fem->p_shared[i])) //We own this shared vertex
+			inprod_local += fem->x[i] * fem->y[i];
+
+	for (int i = fem->n_shared; i < fem->n_vert; i++) 
+		inprod_local += fem->x[i] * fem->y[i];
+
+  //Put the local value in all the processors
+  for (int t = 0; t < p; t++) 
+    bsp_put(t, &inprod_local, inprod, s * SZDBL, SZDBL);
+
+  bsp_sync();
+  //Calculate the actual inner product
+  inprod_local = 0;
+  for (int t = 0; t < p; t++)
+    inprod_local += inprod[t];
+
+  //Free data stuff
+  bsp_pop_reg(inprod);
+  vecfreed(inprod);
+	bsp_sync();
+
+  return inprod_local;
+} 
 
 
 #define DEBUG(...) { if ( use_debug && s == 0) printf(__VA_ARGS__); }
