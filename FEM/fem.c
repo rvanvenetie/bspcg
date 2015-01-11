@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <libgen.h> 
+#include <cblas.h>
 #include "mesh.h"
 #include "io.h"
 #include "vec.h"
@@ -12,6 +13,10 @@
 #include "bspedupack.h"
 
 
+#define B_ONES 0
+#define B_LOAD 1
+#define B_AX 2
+#define B_RAND 3
 /* These variables may be acces by any processor */
 int kmax		 = 10000;
 int b_mode	 = B_ONES;
@@ -21,7 +26,7 @@ int use_time = 1;
 /* These variables may only be acces by s = 0 */
 int P        = 1;
 char * meshbuffer   = NULL;
-#define BUFERSTRSIZE 1024
+#define BUFFERSTRSIZE 1024
 
 
 /*
@@ -57,7 +62,7 @@ char * meshbuffer   = NULL;
 	 * TODO: Even out the amount of vertices owned by a processor, this implies
 	 * a better distribution of the vector among the processors. 
 	 */
-
+typedef int triangle[3];
 /* Data structure for the (distributed) triangulation */
 typedef struct {
   /* Vertices */
@@ -66,7 +71,7 @@ typedef struct {
   int n_vert;   //Amount of vertices
   
   /* Triangles */
-  int * t[3];   //Triangles consist of three vertices
+  triangle * t;   //Triangles consist of three vertices
   int * p;      //Processor that is owner of this triangle
   int n_tri;    //Amount of triangles
 } mesh_dist;
@@ -76,47 +81,50 @@ typedef long long unsigned int proc_set;
  
 /* Data structure for the data of each processor */
 typedef struct {
-  /*
-   * Vertices used in this processor. First we store the shared
-   * vertices, then we save all the vertices we `own'.
-   */
+	/*
+	 * Vertices used in this processor. We have the following order:
+	 * 1) Shared vertices 
+	 * 2) Owned vertices
+	 * 3) Boundary vertices (all the vertices lying on the boundary
+	 */
   double *x, *y;			 //Vertices 
-  int * b;						 //Indicates whether this vertex lies on the boundary
-  int n_vert;					 //Length of the (local) array
-	int n_vert_total;    //Total length of vertices in the system
+	int n_shared;        //Amount of shared vertices (not bound)
+	int n_own;           //Amount of owned vertices (not bound)
+	int n_bound;         //Amount of vertices on the boundary
+	int n_vert;          //Total amount of vertices (n_shared + n_own + n_bound)
 
-
-  int n_shared;				 //Amount of shared vertices
+	int dof;					 	 //Degrees of freedom, in our case n_shared + n_own
 	proc_set * p_shared; //Processor sets for the shared vertices
 
+	int n_vert_total;    //Total amount of vertices in the system
   int * i_glob;				 //Global index that corresponds to the local vertex
 	int * glob2local;    //Lazy way to convert global to local indices 
+
   //int ** i_shared;		 //Array of (p,i_loc), giving the local index on processor p for this vertex
 
   /* Triangles on this processor. Should be LOCAL indices */
-  int * t[3]; 
   int n_tri; 
+	triangle * t;
 
   /* FEM matrix for this processor */
   matrix_s mat;
 } bsp_fem_data;
 
 
-void gen_element_matrix(double * res, double *x, double *y, int t[3]) {
+void gen_element_matrix(double * res, double *x, double *y, triangle t) {
   //Dit is eigenlijk gewoon gelijk aan het product van twee matrices
   //Minder duidelijk zo?
   //http://en.wikipedia.org/wiki/Stiffness_matrix (Die matrix D onderin)
-  static double D[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
+  double D_mat[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
 											 y[t[2]] - y[t[1]], y[t[0]] - y[t[2]], y[t[1]] - y[t[0]]};
   //Area triangle times 2
   double area = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
   //Calculate the upper part of Ak. Ak \gets area / 2.0 * D.T * D
-	double * C = res;
-  cblas_dsyrk('U', 'T', 3, 2, area / 2.0, D, 2, 0, C, 3);
-  //C should now hold the correct values??????
+  //cblas_dsyrk(CblasRowMajor, CblasUpper, CblasTrans, 3, 2, area / 2.0, D_mat, 2, 0, res, 3);
+  //res should now hold the correct values??????
   for (int i = 0; i < 3; i++)
    for (int j = 0; j <= i; j++)
-     fprintf(stderr,"C[%d,%d] = %g\n", i,j, C[i*3 + j]);
+     fprintf(stderr,"Res[%d,%d] = %g\n", i,j, res[i*3 + j]);
 
 
   static double A[9] = {0.5, -0.5, 0, 
@@ -152,9 +160,9 @@ void gen_element_matrix(double * res, double *x, double *y, int t[3]) {
 }
 
 
-matrix_s gen_fem_mat(double *x, double *y, int n_vert,
-		                 int * t[3], int n_tri) {
-	matrix_s result = mat_create(n_vert, n_vert);
+matrix_s gen_fem_mat(double *x, double *y, int dof,
+		                 triangle * t, int n_tri) {
+	matrix_s result = mat_init(dof, dof);
 	for (int k = 0; k < n_tri; k++) {
 		//Calculate element matrix for triangle t[k]
 		double el_mat[3*3];
@@ -182,12 +190,12 @@ int proc_count(proc_set set) {
 
 /* Add a processor to a set */
 void proc_add(proc_set * set, int proc) {
-  (*proc_set) |= 1 << proc;
+  (*set) |= 1 << proc;
 }
 
 /* Remove a processor from a set */
 void proc_remove(proc_set * set, int proc) {
-	(*proc_set) &= (1 << proc);
+	(*set) &= (1 << proc);
 }
 
 /* Returns whether a given processor is in a set */
@@ -213,7 +221,7 @@ int proc_owner(proc_set set)  {
 	 the amount of owned/shared vertices per processor */
 void mesh_proc_sets(int p, mesh_dist * mesh,
 									  int * n_tri_proc,
-		                proc_set * vert_proc, int * n_vert_proc, int * n_shared_proc) {
+		                proc_set * vert_proc, int * n_own_proc, int * n_shared_proc, int * n_bound_proc) {
 		 						
 	//Loop over triangles to determine processor sets and amount of tri per proc
 	for (int i = 0; i < mesh->n_tri; i++)  {
@@ -225,21 +233,26 @@ void mesh_proc_sets(int p, mesh_dist * mesh,
 	}
   /*
 	 * For each processor we now calculate:
-	 *  1) The total amount of vertices
-	 *  2) The amount of vertices they share
+	 *  1) Amount of shared vertices (non bound)
+	 *  2) Amount of owned verices (non bound)
+	 *  3) Amount of boundary vertices  (shared/own)
 	 */
 
 	for (int v = 0; v < mesh->n_vert; v++)
 	{
 		int v_shared = (proc_count(vert_proc[v]) > 1); 
+		int v_bound  = (mesh->b[v]);
 
 		//Loop over all the processors using this vertex
 		int proc = -1;
 		while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 		{
-			n_vert_proc[proc]++; 		
-			if (v_shared)
-				n_shared_proc[proc]++; //Shared vertex as well
+			if (v_bound)
+				n_bound_proc[proc]++;
+			else if (v_shared)
+				n_shared_proc[proc]++;
+			else
+				n_own_proc[proc]++;
 		}
 	}
 }
@@ -265,49 +278,56 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 		exit(0);
 	}
 	bsp_fem_data result;
-	bsp_push_reg(&result.n_vert,   SZINT);
-	bsp_push_reg(&result.n_vert_total, SZINT);
+	bsp_push_reg(&result.n_own,   SZINT);
 	bsp_push_reg(&result.n_shared, SZINT);
+	bsp_push_reg(&result.n_bound, SZINT);
 	bsp_push_reg(&result.n_tri,    SZINT);
+	bsp_push_reg(&result.n_vert_total, SZINT);
 	bsp_sync();
 
 	proc_set * vert_proc = NULL; 
-	int *    n_vert_proc = NULL;
+	int *     n_own_proc = NULL;
 	int *	 n_shared_proc = NULL;
+	int *   n_bound_proc = NULL;
 	int * 	  n_tri_proc = NULL;
 	if (s == 0) {
 		vert_proc					= calloc(sizeof(proc_set), mesh->n_vert); 
-		n_vert_proc				= calloc(sizeof(int), p);
+		n_own_proc				= calloc(sizeof(int), p);
 		n_shared_proc     = calloc(sizeof(int), p);
+		n_bound_proc			= calloc(sizeof(int), p);
 		n_tri_proc        = calloc(sizeof(int), p);
 
 		//Calculate processor sets, amount of shared/owned vertices and amount of triangles
-		mesh_proc_sets(p, mesh, n_tri_proc, vert_proc, n_vert_proc, n_shared_proc);
+		mesh_proc_sets(p, mesh, n_tri_proc, vert_proc, n_own_proc, n_shared_proc, n_bound_proc);
 		for (int proc = 0; proc < p; proc++)
 		{
-			bsp_put(proc, &n_vert_proc[proc],   &result.n_vert  , 0, SZINT);
+			bsp_put(proc, &n_own_proc[proc],    &result.n_own   , 0, SZINT);
 			bsp_put(proc, &n_shared_proc[proc], &result.n_shared, 0, SZINT);
+			bsp_put(proc, &n_bound_proc[proc], &result.n_bound  , 0, SZINT);
 			bsp_put(proc, &n_tri_proc[proc],    &result.n_tri,    0, SZINT);
+			bsp_put(proc, &mesh->n_vert   , &result.n_vert_total, 0, SZINT);
 		}
-		bsp_put(proc, &mesh->n_vert, &result.n_vert_total, 0, SZINT);
 	}
 	bsp_sync();
 	//Every processor now knows the amount of vertices (shared/owned) and amount of triangles it holds.
-	bsp_pop_reg(&result.n_vert);
-	bsp_pop_reg(&result.n_vert_total);
+	bsp_pop_reg(&result.n_own);
 	bsp_pop_reg(&result.n_shared);
+	bsp_pop_reg(&result.n_bound);
 	bsp_pop_reg(&result.n_tri);
+	bsp_pop_reg(&result.n_vert_total);
+
+	result.n_vert = result.n_shared + result.n_own + result.n_bound;
+	result.dof    = result.n_shared + result.n_own;
 
 	result.x			  = malloc(sizeof(double)     * result.n_vert);
 	result.y			  = malloc(sizeof(double)     * result.n_vert);
-	result.b        = malloc(sizeof(int)        * result.n_vert);
+
 	result.i_glob   = malloc(sizeof(int)        * result.n_vert);
 	result.p_shared = malloc(sizeof(proc_set)   * result.n_shared);
 	result.t			  = malloc(sizeof(result.t[0])* result.n_tri);
 
   bsp_push_reg(result.x, SZDBL * result.n_vert);
   bsp_push_reg(result.y, SZDBL * result.n_vert);
-	bsp_push_reg(result.b, SZINT * result.n_vert);
 	bsp_push_reg(result.i_glob, SZINT * result.n_vert);
 	bsp_push_reg(result.p_shared, sizeof(proc_set) * result.n_shared);
 	bsp_push_reg(result.t, sizeof(result.t[0]) * result.n_tri);
@@ -318,21 +338,21 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 
 	if (s == 0) {
 		/* Keep track of a counter per proccesor, so we know what index we should put items */
-		int vert_cntr[p] = {0};
-		int tri_cntr[p]  = {0};
+		int vert_cntr[p], tri_cntr[p];
+		memset(vert_cntr, 0, sizeof(int) * p);
+		memset(tri_cntr, 0, sizeof(int) * p);
 		//Push triangles
 		for (int i = 0; i < mesh->n_tri; i++)
 			bsp_put(mesh->p[i], &mesh->t[i], result.t, tri_cntr[i]++, sizeof(result.t[0]));
 
-		//First push shared vertices
+		//First push shared vertices (not bound)
 		for (int v = 0; v < mesh->n_vert; v++)
-			if (proc_count(vert_proc[v]) > 1) { //Shared vertex
+			if (!mesh->b[v] && proc_count(vert_proc[v]) > 1) { //Shared vertex
 				int proc = -1;
 				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 				{
 					/* All the processors sharing vertex v need:
 					 * - The coordinates of v
-					 * - The processor set
 					 * - Boundary vertex
 					 * - The global index of v (given by v itself, confusing huh ;-))
 					 */
@@ -340,7 +360,6 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
 					bsp_put(proc, &vert_proc[v], result.p_shared, vert_cntr[proc], SZDBL);
 					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
-					bsp_put(proc, &b,            result.b, vert_cntr[proc], SZINT);
 					vert_cntr[proc]++;
 			}
 		}
@@ -352,15 +371,26 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 				bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc], SZDBL);
 				bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
 				bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
-				bsp_put(proc, &b,            result.b, vert_cntr[proc], SZINT);
 				vert_cntr[proc]++;
+			}
+
+		//Push boundary vertices
+		for (int v = 0; v < mesh->n_vert; v++)
+			if (mesh->b[v]) { //Boundary vertex
+				int proc = -1;
+				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
+				{
+					bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc], SZDBL);
+					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
+					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
+					vert_cntr[proc]++;
+				}
 			}
 	}
 	bsp_sync();
-	/* Every processor has all the elements. Only thing left to figure out glob2local indexing */
+	/* Every processor has all the elements. Now convert global indexing to local indexing */
 	bsp_pop_reg(result.x);
 	bsp_pop_reg(result.y);
-	bsp_pop_reg(result.b);
 	bsp_pop_reg(result.i_glob);
 	bsp_pop_reg(result.p_shared);
 	
@@ -376,21 +406,107 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 			result.t[i][v] = result.glob2local[result.t[i][v]];
 
 	/* Memory structure is now all set, lets produce the FEM matrix */
-	result.mat = gen_fem_mat(result.x, result.y, result.n_vert, 
+	result.mat = gen_fem_mat(result.x, result.y, result.dof,
 			                     result.t, result.n_tri);
 
 	/* We are DONE! */
 	bsp_sync();
 }
+//Symmetric sparse matrix vector multiplication v = Au
+void ssmv(double * v, matrix_s * mat,  double * u) {
+	for (int k = 0; k < mat->n; k++)
+		v[k] = 0;
 
+	for (int k = 0; k < mat->nz; k++) {
+		int i = mat->I[k];
+		int j = mat->J[k];
+		v[i] += mat->val[k] * u[j];
+		if (i != j)
+			v[j] += mat->val[k] * u[i];
+	}
+}
 
+//Calculate v = Au using our FEM-stuff
+void bsp_fem_mv(int s, bsp_fem_data * fem, double * v, double * u) {
+	int tagsz= SZINT;
+	bsp_set_tagsize(&tagsz);
+	bsp_sync();
 
+	ssmv(v, &fem->mat, u);
+	/*
+	 * For vertices shared by other processors we must communicate.
+	 * We therefore send the local value to all the shared processors with
+	 * the global index as tag
+	 */
+	for (int k = 0; k < fem->n_shared; k++) {
+		int proc = -1;
+		while ((proc = proc_next(fem->p_shared[k], proc+1)) != -1) 
+			if (proc != s) 
+				bsp_send(proc, &fem->i_glob[k], &v[k], SZDBL);
+	}
+	bsp_sync();
+	int status, tag;
+	double tmp_val;
+  bsp_get_tag(&status, &tag);
+	while (status != -1) { //Process all the messages
+		bsp_move(&tmp_val, SZDBL);
+		//Tag holds the global index, tmp_val the value
+		v[fem->glob2local[tag]] += tmp_val;
+		bsp_get_tag(&status, &tag);
+	}
+	//Done!
+}
 
+double bsp_fem_ip(int p, int s,  //Processor information  
+    double * x, double * y,      //Vector data
+    bsp_fem_data * fem)          //Distribution information
+{
+  /*
+   * Every processor calculates its own local inner product.
+   * It then puts this value in all the other processors.
+   * After which every processor calculates the total inner
+   * product.
+	 *
+	 * We explicitely need to exclude vertices we shared, but that
+	 * we do not own.
+   */
+  double inprod_local;
+  double * inprod;
+  inprod = vecallocd(p);
+  bsp_push_reg(inprod, p * SZDBL);
+  bsp_sync();
+
+  //Calculate local inproduct
+  inprod_local = 0;
+	for (int i = 0; i < fem->n_shared; i++)
+		if (s == proc_owner(fem->p_shared[i])) //We own this shared vertex
+			inprod_local += fem->x[i] * fem->y[i];
+
+	for (int i = fem->n_shared; i < fem->n_vert; i++) 
+		inprod_local += fem->x[i] * fem->y[i];
+
+  //Put the local value in all the processors
+  for (int t = 0; t < p; t++) 
+    bsp_put(t, &inprod_local, inprod, s * SZDBL, SZDBL);
+
+  bsp_sync();
+  //Calculate the actual inner product
+  inprod_local = 0;
+  for (int t = 0; t < p; t++)
+    inprod_local += inprod[t];
+
+  //Free data stuff
+  bsp_pop_reg(inprod);
+  vecfreed(inprod);
+	bsp_sync();
+
+  return inprod_local;
+} 
 
 
 #define DEBUG(...) { if ( use_debug && s == 0) printf(__VA_ARGS__); }
 
-void bspcg() {
+void bspfem() {
   double time_init, time_done, time_total;
   double time_before_mv, time_mv;
   double time_before_ip, time_ip;
@@ -432,7 +548,7 @@ void bspcg() {
 	bsp_pop_reg(&use_time);
 
 	//TODO: Load mesh_from file
-	mesh_total = load_mesh_distribution_from_file(meshbuffer);
+	//mesh_total = load_mesh_distribution_from_file(meshbuffer);
 	fem = bsp_fem_init(s,p, &mesh_total);
 
 	if (use_debug) {
@@ -654,7 +770,6 @@ int main(int argc, char *argv[]) {
 	meshbuffer  = malloc(BUFFERSTRSIZE);
 	snprintf( meshbuffer, BUFFERSTRSIZE, "%s", argv[1]);
 	bspfem();
-  bspcg();
 	free(meshbuffer);
   exit(0);
 }
