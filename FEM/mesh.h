@@ -21,9 +21,11 @@ typedef struct {
   int P; //number of processors in distribution
 } mesh_dist;
 
+matrix_s mat_init(int n, int m);
+int mat_append( matrix_s *mat, int i, int j, double val);
+
 //write mesh to mesh file, either distributed or not
 int write2meshfile( FILE *fp, mesh_dist *mesh, int distributed);
-
 //read mesh file into struct
 mesh_dist readfrommeshfile( FILE *fp);
 
