@@ -43,69 +43,69 @@ int mat_append( matrix_s *mat, int i, int j, double val) {
   return mat->nz++;
 }
 
-int write2meshfile( FILE *fp, mesh_s *mesh, int distributed) {
+int write2meshfile( FILE *fp, mesh_dist *mesh, int distributed) {
   if( distributed)
     fprintf( fp, "%%distributed\n");
   else
     fprintf( fp, "%%sequential\n");
-  fprintf( fp, "%d %d", mesh->nverts, mesh->ntris);
+  fprintf( fp, "%d %d", mesh->n_vert, mesh->n_tri);
   if( distributed)
     fprintf( fp, " %d", mesh->P);
   fprintf( fp, "\n");
 
-  for( int i = 0; i < mesh->nverts; i++) {
+  for( int i = 0; i < mesh->n_vert; i++) {
     fprintf( fp, "%g %g %d\n", mesh->x[i], mesh->y[i], mesh->b[i]);
   }
-  for( int i = 0; i < mesh->ntris; i++) {
-    fprintf( fp, "%d %d %d", mesh->t[3*i+0], mesh->t[3*i+1], mesh->t[3*i+2]);
+  for( int i = 0; i < mesh->n_tri; i++) {
+    fprintf( fp, "%d %d %d", mesh->t[i][0], mesh->t[i][1], mesh->t[i][2]);
     if( distributed)
-      fprintf( fp, " %d", mesh->d[i]);
+      fprintf( fp, " %d", mesh->p[i]);
     fprintf( fp, "\n");
   }
 
   return 0;
 }
 
-mesh_s *readfrommeshfile( FILE *fp) {
+mesh_dist *readfrommeshfile( FILE *fp) {
   int distributed = 0;
-  mesh_s *mesh = malloc( sizeof( mesh_s));
+  mesh_dist *mesh = malloc( sizeof( mesh_dist));
   char buf[256];
   fscanf( fp, "%%%s\n", buf);
   if( strstr( buf, "distributed") != NULL)
     distributed = 1;
-  fscanf( fp, "%d %d", &mesh->nverts, &mesh->ntris);
+  fscanf( fp, "%d %d", &mesh->n_vert, &mesh->n_tri);
   if( distributed)
     fscanf( fp, " %d", &mesh->P);
   fscanf( fp, "\n");
-  mesh->x = malloc( mesh->nverts * sizeof( double));
-  mesh->y = malloc( mesh->nverts * sizeof( double));
-  mesh->b = malloc( mesh->nverts * sizeof( int));
+  mesh->x = malloc( mesh->n_vert * sizeof( double));
+  mesh->y = malloc( mesh->n_vert * sizeof( double));
+  mesh->b = malloc( mesh->n_vert * sizeof( int));
 
-  mesh->t = malloc( 3 * mesh->ntris * sizeof( int));
-  mesh->d = malloc( mesh->ntris * sizeof( int));
+  mesh->t = malloc( 3 * mesh->n_tri * sizeof( int));
+  mesh->p = malloc( mesh->n_tri * sizeof( int));
   
-  for( int i = 0; i < mesh->nverts; i++) {
+  for( int i = 0; i < mesh->n_vert; i++) {
     fscanf( fp, "%lg %lg %d\n", &mesh->x[i], &mesh->y[i], &mesh->b[i]);
   }
 
-  for( int i = 0; i < mesh->ntris; i++) {
-    fscanf( fp, "%d %d %d", &mesh->t[3*i+0], &mesh->t[3*i+1], &mesh->t[3*i+2]);
+  for( int i = 0; i < mesh->n_tri; i++) {
+    fscanf( fp, "%d %d %d", &mesh->t[i][0], &mesh->t[i][1], &mesh->t[i][2]);
     if( distributed)
-      fscanf( fp, " %d", &mesh->d[i]);
+      fscanf( fp, " %d", &mesh->p[i]);
     fscanf( fp, "\n");
   }
 
   return mesh;
 }
 
-int write2mtx( FILE *fp, mesh_s *mesh) {
+int write2mtx( FILE *fp, mesh_dist *mesh, matrix_s *hypergraph) {
   fprintf( fp, "%%%%MatrixMarket weightedmatrix coordinate pattern general\n");
-  int nhypernets = mesh->nverts;
-  int nhyperverts = mesh->ntris;
-  fprintf( fp, "%d %d %d %d\n", nhypernets, nhyperverts, mesh->hypergraph->nz, 3);
+  int nhypernets = mesh->n_vert;
+  int nhyperverts = mesh->n_tri;
+  fprintf( fp, "%d %d %d %d\n", nhypernets, nhyperverts, hypergraph->nz, 3);
 
-  for( int i = 0; i < mesh->hypergraph->nz; i++) {
-    fprintf( fp, "%d %d\n", mesh->hypergraph->I[i]+1, mesh->hypergraph->J[i]+1);
+  for( int i = 0; i < hypergraph->nz; i++) {
+    fprintf( fp, "%d %d\n", hypergraph->I[i]+1, hypergraph->J[i]+1);
   }
 
   for( int i = 0; i < nhyperverts; i++) {
@@ -119,44 +119,43 @@ int write2mtx( FILE *fp, mesh_s *mesh) {
   return 0;
 }
 
-int readfromvfile( FILE *fp, mesh_s *mesh) {
+int readfromvfile( FILE *fp, mesh_dist *mesh) {
   int ncols, P, col, s;
   fscanf( fp, "%d %d\n", &ncols, &P);
-  if( ncols != mesh->ntris) exit( 1);
+  if( ncols != mesh->n_tri) exit( 1);
 
   for( int i = 0; i < ncols; i++) {
     fscanf( fp, "%d %d\n", &col, &s);
     if( col != i+1) exit( 1);
-    mesh->d[i] = s-1;
+    mesh->p[i] = s-1;
   }
 
   return 0;
 }
 
-void create_hypergraph_from_mesh( mesh_s *mesh) {
-  matrix_s *hypergraph = mat_create( mesh->ntris, mesh->nverts);
-  for( int i = 0; i < mesh->nverts; i++) {
-    for( int j = 0; j < mesh->ntris; j++) {
+matrix_s *create_hypergraph_from_mesh( mesh_dist *mesh) {
+  matrix_s *hypergraph = mat_create( mesh->n_tri, mesh->n_vert);
+  for( int i = 0; i < mesh->n_vert; i++) {
+    for( int j = 0; j < mesh->n_tri; j++) {
       for( int k = 0; k < 3; k++) {
-        if( mesh->t[3*j+k] == i)
+        if( mesh->t[j][k] == i)
           mat_append( hypergraph, i, j, 1);
       }
     }
   }
 
-  mesh->hypergraph = hypergraph;
+  return hypergraph;
 }
 
-#ifdef FOKJOE
 int main( void) {
   FILE *mfile = fopen( "lshaped.m", "r");
   FILE *mtxfile = fopen( "lshaped.mtx", "w");
   FILE *vfile = fopen( "lshaped.mtx-v2", "r");
   FILE *dmfile = fopen( "lshaped.dm", "w");
 
-  mesh_s *mesh = readfrommeshfile( mfile);
-  create_hypergraph_from_mesh( mesh);
-  write2mtx( mtxfile, mesh);
+  mesh_dist *mesh = readfrommeshfile( mfile);
+  matrix_s *hypergraph = create_hypergraph_from_mesh( mesh);
+  write2mtx( mtxfile, mesh, hypergraph);
 
   //now run Mondriaan on this mtx file
   exit(0);
@@ -165,7 +164,6 @@ int main( void) {
   readfromvfile( vfile, mesh);
 
   write2meshfile( dmfile, mesh, 1); //write distributed m file
-  mesh_s *new_mesh = readfrommeshfile( dmfile);
+  mesh_dist *new_mesh = readfrommeshfile( dmfile);
   return 0;
 }
-#endif
