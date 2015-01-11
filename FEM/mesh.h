@@ -7,15 +7,24 @@ typedef struct {
 } matrix_s;
 
 typedef struct {
+  int lenverts, lentris;
   int nverts, ntris, P;
   double *x, *y; //x and y coords
   int *b; //boundary
-  int *t; //tris coords, len = ntris*3
+  int *t; //tris indices, len = ntris*3
   int *d; //distribution
   matrix_s *hypergraph;
 } mesh_s;
 
+//write mesh to mesh file, either distributed or not
+int write2meshfile( FILE *fp, mesh_s *mesh, int distributed);
 
-matrix_s * mat_create( int n, int m);
-int mat_append( matrix_s *mat, int i, int j, double val);
+//read mesh file into struct
+mesh_s *readfrommeshfile( FILE *fp);
+
+//write mesh info mtx file (to go into Mondriaan)
+int write2mtx( FILE *fp, mesh_s *mesh);
+
+//read Mondriaan output and combine with existing mesh struct
+int readfromvfile( FILE *fp, mesh_s *mesh);
 #endif

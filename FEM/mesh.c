@@ -1,6 +1,16 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "mesh.h"
+
+/**
+ * Workflow:
+ *  1. Create some mesh, load it into the struct
+ *  2. Save the hypergraph to file using write2mtx()
+ *  3. Run Mondriaan on this file to get the triangle distribution
+ *  4. Load its result using readfromvfile()
+ *  5. Write the resulting mesh and its distribution to file using write2meshfile()
+ */
 
 matrix_s * mat_create( int n, int m) {
   matrix_s *mat = malloc( sizeof( matrix_s));
@@ -28,7 +38,62 @@ int mat_append( matrix_s *mat, int i, int j, double val) {
   return mat->nz++;
 }
 
-int write2mmfile( FILE *fp, mesh_s *mesh) {
+int write2meshfile( FILE *fp, mesh_s *mesh, int distributed) {
+  if( distributed)
+    fprintf( fp, "%%distributed\n");
+  else
+    fprintf( fp, "%%sequential\n");
+  fprintf( fp, "%d %d", mesh->nverts, mesh->ntris);
+  if( distributed)
+    fprintf( fp, " %d", mesh->P);
+  fprintf( fp, "\n");
+
+  for( int i = 0; i < mesh->nverts; i++) {
+    fprintf( fp, "%g %g %d\n", mesh->x[i], mesh->y[i], mesh->b[i]);
+  }
+  for( int i = 0; i < mesh->ntris; i++) {
+    fprintf( fp, "%d %d %d", mesh->t[3*i+0], mesh->t[3*i+1], mesh->t[3*i+2]);
+    if( distributed)
+      fprintf( fp, " %d", mesh->d[i]);
+    fprintf( fp, "\n");
+  }
+
+  return 0;
+}
+
+mesh_s *readfrommeshfile( FILE *fp) {
+  int distributed = 0;
+  mesh_s *mesh = malloc( sizeof( mesh_s));
+  char buf[256];
+  fscanf( fp, "%%%s\n", buf);
+  if( strstr( buf, "distributed") != NULL)
+    distributed = 1;
+  fscanf( fp, "%d %d", &mesh->nverts, &mesh->ntris);
+  if( distributed)
+    fscanf( fp, " %d", &mesh->P);
+  fscanf( fp, "\n");
+  mesh->x = malloc( mesh->nverts * sizeof( double));
+  mesh->y = malloc( mesh->nverts * sizeof( double));
+  mesh->b = malloc( mesh->nverts * sizeof( int));
+
+  mesh->t = malloc( 3 * mesh->ntris * sizeof( int));
+  mesh->d = malloc( mesh->ntris * sizeof( int));
+  
+  for( int i = 0; i < mesh->nverts; i++) {
+    fscanf( fp, "%lg %lg %d\n", &mesh->x[i], &mesh->y[i], &mesh->b[i]);
+  }
+
+  for( int i = 0; i < mesh->ntris; i++) {
+    fscanf( fp, "%d %d %d", &mesh->t[3*i+0], &mesh->t[3*i+1], &mesh->t[3*i+2]);
+    if( distributed)
+      fscanf( fp, " %d", &mesh->d[i]);
+    fscanf( fp, "\n");
+  }
+
+  return mesh;
+}
+
+int write2mtx( FILE *fp, mesh_s *mesh) {
   fprintf( fp, "%%%%MatrixMarket weightedmatrix coordinate pattern general\n");
   int nhypernets = mesh->nverts;
   int nhyperverts = mesh->ntris;
@@ -63,45 +128,37 @@ int readfromvfile( FILE *fp, mesh_s *mesh) {
   return 0;
 }
 
-int main( void) {
-  const int nverts = 5;
-  const int ntris = 4;
-  const int P = 2; //number of processors
-  double x[nverts] = {0, 1, 1, 0, 0.5};            //x-values for vertices
-  double y[nverts] = {0, 0, 1, 1, 0.5};            //y-values for vertices
-  int b[nverts] = {1, 1, 1, 1, 0};            //boolean boundary for vertices
-  int t[ntris*3] = {4, 0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0};     //triangles
-  int d[ntris] = {-1};
-
-  mesh_s mesh = {
-    .nverts = nverts,
-    .ntris = ntris,
-    .x = x,
-    .y = y,
-    .b = b,
-    .t = t,
-    .P = P,
-    .d = d
-  };
-
-  //create hypergraph matrix
-  matrix_s *hypergraph = create( ntris, nverts);
-  for( int i = 0; i < nverts; i++) {
-    for( int j = 0; j < ntris; j++) {
+void create_hypergraph_from_mesh( mesh_s *mesh) {
+  matrix_s *hypergraph = mat_create( mesh->ntris, mesh->nverts);
+  for( int i = 0; i < mesh->nverts; i++) {
+    for( int j = 0; j < mesh->ntris; j++) {
       for( int k = 0; k < 3; k++) {
-        if( t[3*j+k] == i)
-          append( hypergraph, i, j, 1);
+        if( mesh->t[3*j+k] == i)
+          mat_append( hypergraph, i, j, 1);
       }
     }
   }
 
-  mesh.hypergraph = hypergraph;
+  mesh->hypergraph = hypergraph;
+}
 
-  write2mmfile( stdout, &mesh);
-  FILE *vfile = fopen( "bla.mtx-v2", "r");
-  readfromvfile( vfile, &mesh);
-  for( int i = 0; i < mesh.P; i++) {
-    //printf("%d %d\n", i, mesh.d[i]);
-  }
+int main( void) {
+  FILE *mfile = fopen( "lshaped.m", "r");
+  FILE *mtxfile = fopen( "lshaped.mtx", "w");
+  FILE *vfile = fopen( "lshaped.mtx-v2", "r");
+  FILE *dmfile = fopen( "lshaped.dm", "w");
+
+  mesh_s *mesh = readfrommeshfile( mfile);
+  create_hypergraph_from_mesh( mesh);
+  write2mtx( mtxfile, mesh);
+
+  //now run Mondriaan on this mtx file
+  exit(0);
+
+  mesh->P = 2;
+  readfromvfile( vfile, mesh);
+
+  write2meshfile( dmfile, mesh, 1); //write distributed m file
+  mesh_s *new_mesh = readfrommeshfile( dmfile);
   return 0;
 }
