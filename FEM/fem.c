@@ -36,6 +36,15 @@
  *
 */
 
+	/*
+	 * If a vertex is shared among multiple processors we have to decide who
+	 * is going to be the 'owner' of the vertex. We simply give the processor
+	 * with the smallest number the owner. 
+	 * 
+	 * TODO: Even out the amount of vertices owned by a processor, this implies
+	 * a better distribution of the vector among the processors. 
+	 */
+
 /* Data structure for the (distributed) triangulation */
 typedef struct {
   /* Vertices */
@@ -56,23 +65,98 @@ typedef struct {
    * Vertices used in this processor. First we store the shared
    * vertices, then we save all the vertices we `own'.
    */
-  double *x, *y;		 //Vertices 
-  int n_vert;				 //Length of the array
-  int n_shared;			 //Amount of shared vertices
-  int n_shared_owned;//Amount of shared vertices that we own
-  int * p_shared;    //Amount of processors that share this vertex
-  int ** i_shared;   //Array of (p,i_loc), giving the local index on processor p for this vertex
-  int * i_glob;			 //Global index that corresponds to the local vertex
-  int * b;					 //Indicates whether this vertex lies on the boundary
+  double *x, *y;			 //Vertices 
+  int * b;						 //Indicates whether this vertex lies on the boundary
+  int n_vert;					 //Length of the (local) array
+	int n_vert_total;    //Total length of vertices in the system
+
+
+  int n_shared;				 //Amount of shared vertices
+	proc_set * p_shared; //Processor sets for the shared vertices
+
+  int * i_glob;				 //Global index that corresponds to the local vertex
+	int * glob2local;    //Lazy way to convert global to local indices 
+  //int ** i_shared;		 //Array of (p,i_loc), giving the local index on processor p for this vertex
 
   /* Triangles on this processor */
   int * t[3]; 
-  int n_vert; 
+  int n_tri; 
 
   /* FEM matrix for this processor */
   matrix_s mat;
 } bsp_fem_data;
 
+/* Functions to create a processor set */
+typedef long long unsigned int proc_set;
+
+/* Count the amount of processors in a set */
+int proc_count(proc_set set) {
+	return	__builtin_popcountll(set);
+}
+
+/* Add a processor to a set */
+void proc_add(proc_set * set, int proc) {
+  (*proc_set) |= 1 << proc;
+}
+
+/* Remove a processor from a set */
+void proc_remove(proc_set * set, int proc) {
+	(*proc_set) &= (1 << proc);
+}
+
+/* Returns whether a given processor is in a set */
+int proc_test(proc_set set, int proc) {
+	return (set & (1 << proc));
+}
+
+/* Returns the next processor (>= proc) in the set, returns -1 if no processor is found */
+int proc_next(proc_set set, int proc)  {
+	for (int i = proc; i < 64; i++)
+		if (proc_test(set, i))
+			return i;
+
+	return -1;
+}
+
+/* Returns the owner of a given processor set (processor with smallest proc number) */
+int proc_owner(proc_set set)  {
+	return proc_next(set, -1);
+}
+
+/* Calculates the processor sets for each of the processors and
+	 the amount of owned/shared vertices per processor */
+void mesh_proc_sets(int p, mesh_dist * mesh,
+									  int * n_tri_proc,
+		                proc_set * vert_proc, int * n_vert_proc, int * n_shared_proc) {
+		 						
+	//Loop over triangles to determine processor sets and amount of tri per proc
+	for (int i = 0; i < mesh->n_tri; i++)  {
+		n_tri_proc[mesh->p[i]]++;
+		//Loop over vertices of triangle t[i]
+		for (int v = 0; v < 3; v++) 
+			//Processor that owns triangle t[i] uses vertex v
+			proc_add(&vert_proc[mesh->t[i][v]], mesh->p[i]);
+	}
+  /*
+	 * For each processor we now calculate:
+	 *  1) The total amount of vertices
+	 *  2) The amount of vertices they share
+	 */
+
+	for (int v = 0; v < mesh->n_vert; v++)
+	{
+		int v_shared = (proc_count(vert_proc[v]) > 1); 
+
+		//Loop over all the processors using this vertex
+		int proc = -1;
+		while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
+		{
+			n_vert_proc[proc]++; 		
+			if (v_shared)
+				n_shared_proc[proc]++; //Shared vertex as well
+		}
+	}
+}
 
 bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	/*
@@ -94,36 +178,117 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 		fprintf(stderr, "Cannot handle more than 64 processors.");
 		exit(0);
 	}
+	bsp_fem_data result;
+	bsp_push_reg(&result.n_vert,   SZINT);
+	bsp_push_reg(&result.n_vert_total, SZINT);
+	bsp_push_reg(&result.n_shared, SZINT);
+	bsp_push_reg(&result.n_tri,    SZINT);
+	bsp_sync();
+
+	proc_set * vert_proc = NULL; 
+	int *    n_vert_proc = NULL;
+	int *	 n_shared_proc = NULL;
+	int * 	  n_tri_proc = NULL;
 	if (s == 0) {
-		long long unsigned int * vert_p= calloc(sizeof(long long unsigned int), mesh->n_vert); //Store the set
+		vert_proc					= calloc(sizeof(proc_set), mesh->n_vert); 
+		n_vert_proc				= calloc(sizeof(int), p);
+		n_shared_proc     = calloc(sizeof(int), p);
+		n_tri_proc        = calloc(sizeof(int), p);
 
-		//Loop over triangles to determine which processor owns which vertex
-		for (int i = 0; i < mesh->n_tri; i++) 
-			for (int v = 0; v < 3; v++) //triangle has 3 vertices
-				//Processor that owns triangle i uses vertex v
-				vert_p[mesh->t[i][v]] |= 1 << mesh->p[i];
+		//Calculate processor sets, amount of shared/owned vertices and amount of triangles
+		mesh_proc_sets(p, mesh, n_tri_proc, vert_proc, n_vert_proc, n_shared_proc);
+		for (int proc = 0; proc < p; proc++)
+		{
+			bsp_put(proc, &n_vert_proc[proc],   &result.n_vert  , 0, SZINT);
+			bsp_put(proc, &n_shared_proc[proc], &result.n_shared, 0, SZINT);
+			bsp_put(proc, &n_tri_proc[proc],    &result.n_tri,    0, SZINT);
+		}
+		bsp_put(proc, &mesh->n_vert, &result.n_vert_total, 0, SZINT);
+	}
+	bsp_sync();
+	//Every processor now knows the amount of vertices (shared/owned) and amount of triangles it holds.
+	bsp_pop_reg(&result.n_vert);
+	bsp_pop_reg(&result.n_vert_total);
+	bsp_pop_reg(&result.n_shared);
+	bsp_pop_reg(&result.n_tri);
 
+	result.x			  = malloc(sizeof(double)     * result.n_vert);
+	result.y			  = malloc(sizeof(double)     * result.n_vert);
+	result.b        = malloc(sizeof(int)        * result.n_vert);
+	result.i_glob   = malloc(sizeof(int)        * result.n_vert);
+	result.p_shared = malloc(sizeof(proc_set)   * result.n_shared);
+	result.t			  = malloc(sizeof(result.t[0])* result.n_tri);
 
-		/*
-		 * We now have a set of processors for each vertex (given by the bit states).
-		 * If a vertex is shared among multiple processors we have to decide who
-		 * is going to be the 'owner' of the vertex. We simple give the processor
-		 * with the smallest number the owner. 
-		 * 
-		 * First give all the processors the vertices they own.
-		 * Next we give all the processors the shared vertices they own.
-		 * At last we give all the processors the shared vertices they do not own.
-		 *
-		 * TODO: Even out the amount of vertices owned by a processor, this implies
-		 * a better distribution of the vector among the processors.
-		 */
-
-		__builtin_popcountll
-			//We now know which vertex is owned by which processors (set as bit).
+  bsp_push_reg(result.x, SZDBL * result.n_vert);
+  bsp_push_reg(result.y, SZDBL * result.n_vert);
+	bsp_push_reg(result.b, SZINT * result.n_vert);
+	bsp_push_reg(result.i_glob, SZINT * result.n_vert);
+	bsp_push_reg(result.p_shared, sizeof(proc_set) * result.n_shared);
+	bsp_push_reg(result.t, sizeof(result.t[0]) * result.n_tri);
 	
-}
+	bsp_sync(); 
 
+	//Lets push the data to the corresponding processors!
 
+	if (s == 0) {
+		/* Keep track of a counter per proccesor, so we know what index we should put items */
+		int vert_cntr[p] = {0};
+		int tri_cntr[p]  = {0};
+		//Push triangles
+		for (int i = 0; i < mesh->n_tri; i++)
+			bsp_put(mesh->p[i], &mesh->t[i], result.t, tri_cntr[i]++, sizeof(result.t[0]));
+
+		//First push shared vertices
+		for (int v = 0; v < mesh->n_vert; v++)
+			if (proc_count(vert_proc[v]) > 1) { //Shared vertex
+				int proc = -1;
+				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
+				{
+					/* All the processors sharing vertex v need:
+					 * - The coordinates of v
+					 * - The processor set
+					 * - Boundary vertex
+					 * - The global index of v (given by v itself, confusing huh ;-))
+					 */
+					bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc], SZDBL);
+					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
+					bsp_put(proc, &vert_proc[v], result.p_shared, vert_cntr[proc], SZDBL);
+					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
+					bsp_put(proc, &b,            result.b, vert_cntr[proc], SZINT);
+					vert_cntr[proc]++;
+			}
+		}
+
+		//Push non-shared vertices
+		for (int v = 0; v < mesh->n_vert; v++)
+			if (proc_count(vert_proc[v]) == 0) { //Non-shared vertex
+				int proc = proc_next(vert_proc[v], -1);
+				bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc], SZDBL);
+				bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
+				bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
+				bsp_put(proc, &b,            result.b, vert_cntr[proc], SZINT);
+				vert_cntr[proc]++;
+			}
+	}
+	bsp_sync();
+	/* Every processor has all the elements. Only thing left to figure out glob2local indexing */
+	bsp_pop_reg(result.x);
+	bsp_pop_reg(result.y);
+	bsp_pop_reg(result.b);
+	bsp_pop_reg(result.i_glob);
+	bsp_pop_reg(result.p_shared);
+	
+	result.glob2local = malloc(sizeof(int) * result.n_vert_total);
+	for (int i = 0; i < result.n_vert_total; i++)
+		result.glob2local[i] = -1;
+	for (int i = 0; i < result.n_vert; i++)
+		result.glob2local[result.i_glob[i]] = i;
+
+	/* Memory structure is now all set, lets produce the FEM matrix */
+	result.mat = gen_fem_mat(&result);
+
+	/* We are DONE! */
+	bsp_sync();
 }
 
 
