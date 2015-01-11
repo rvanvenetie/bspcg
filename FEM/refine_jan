@@ -1,0 +1,35 @@
+
+'''
+TODO: Replace all appends with predefined matrices
+'''
+def Refine(N,T,G):
+	n = N.shape[0] #Amount of vertices
+	m = T.shape[0] #Amount of triangles
+	refined = np.zeros((n,n)) #Indicates if the edge has a new refined vertice yet
+	edges = [(0,1),(0,2),(1,2)] #All edges in a triangle
+	TT = np.zeros((m*4,3),dtype=np.int)
+	TIndex = 0 #Current index in TT
+	for k in range(m):
+		Tk = T[k,:] #Vertices
+		C = N[Tk,:] #Get coordinates of the vertices
+		new_indices = np.zeros(3,dtype=np.int) #Store indices of new vertices in triangle
+		for j in range(3): #Find indices of vertices of sub-triangles
+			a,b = edges[j] #One of the three sides of triangle Tk
+			if refined[Tk[a],Tk[b]] == 0: #We have not yet created new vert on this edge
+				#print "Creating midpoint on", Tk[a],Tk[b]
+				new_vert =	(C[a,:] + C[b,:])/ 2.0
+				N = np.append(N,[new_vert],axis=0)
+				G = np.append(G,1) #Assume this vertice is on the boundary
+				new_indices[j] = n
+				refined[Tk[a],Tk[b]] = refined[Tk[a],Tk[b]] = n
+				n = n +1
+			else:
+				new_indices[j] = refined[Tk[a],Tk[b]]
+				G[new_indices[j]] = 0 #Not on the boundary
+				#print "Already have a midpoint on", Tk[a],Tk[b]
+		#New_indices now holds the vertices of the sub-triangles
+		TT[k*4:4*(k+1),:] = [[Tk[0],new_indices[0],new_indices[1]],
+										 [Tk[1],new_indices[0],new_indices[2]],
+										 [Tk[2],new_indices[1],new_indices[2]],
+										 [new_indices[0],new_indices[1],new_indices[2]]]
+	return N,TT,G
