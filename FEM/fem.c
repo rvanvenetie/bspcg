@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <libgen.h> 
+#include <cblas.h>
 #include "mesh.h"
 #include "io.h"
 #include "vec.h"
@@ -12,6 +13,10 @@
 #include "bspedupack.h"
 
 
+#define B_ONES 0
+#define B_LOAD 1
+#define B_AX 2
+#define B_RAND 3
 /* These variables may be acces by any processor */
 int kmax		 = 10000;
 int b_mode	 = B_ONES;
@@ -21,7 +26,7 @@ int use_time = 1;
 /* These variables may only be acces by s = 0 */
 int P        = 1;
 char * meshbuffer   = NULL;
-#define BUFERSTRSIZE 1024
+#define BUFFERSTRSIZE 1024
 
 
 /*
@@ -57,7 +62,7 @@ char * meshbuffer   = NULL;
 	 * TODO: Even out the amount of vertices owned by a processor, this implies
 	 * a better distribution of the vector among the processors. 
 	 */
-
+typedef int triangle[3];
 /* Data structure for the (distributed) triangulation */
 typedef struct {
   /* Vertices */
@@ -66,7 +71,7 @@ typedef struct {
   int n_vert;   //Amount of vertices
   
   /* Triangles */
-  int * t[3];   //Triangles consist of three vertices
+  triangle * t;   //Triangles consist of three vertices
   int * p;      //Processor that is owner of this triangle
   int n_tri;    //Amount of triangles
 } mesh_dist;
@@ -94,7 +99,7 @@ typedef struct {
   //int ** i_shared;		 //Array of (p,i_loc), giving the local index on processor p for this vertex
 
   /* Triangles on this processor. Should be LOCAL indices */
-  int * t[3]; 
+	triangle * t;
   int n_tri; 
 
   /* FEM matrix for this processor */
@@ -102,21 +107,20 @@ typedef struct {
 } bsp_fem_data;
 
 
-void gen_element_matrix(double * res, double *x, double *y, int t[3]) {
+void gen_element_matrix(double * res, double *x, double *y, triangle t) {
   //Dit is eigenlijk gewoon gelijk aan het product van twee matrices
   //Minder duidelijk zo?
   //http://en.wikipedia.org/wiki/Stiffness_matrix (Die matrix D onderin)
-  static double D[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
+  double D_mat[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
 											 y[t[2]] - y[t[1]], y[t[0]] - y[t[2]], y[t[1]] - y[t[0]]};
   //Area triangle times 2
   double area = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
   //Calculate the upper part of Ak. Ak \gets area / 2.0 * D.T * D
-	double * C = res;
-  cblas_dsyrk('U', 'T', 3, 2, area / 2.0, D, 2, 0, C, 3);
-  //C should now hold the correct values??????
+  cblas_dsyrk(CblasRowMajor, CblasUpper, CblasTrans, 3, 2, area / 2.0, D_mat, 2, 0, res, 3);
+  //res should now hold the correct values??????
   for (int i = 0; i < 3; i++)
    for (int j = 0; j <= i; j++)
-     fprintf(stderr,"C[%d,%d] = %g\n", i,j, C[i*3 + j]);
+     fprintf(stderr,"Res[%d,%d] = %g\n", i,j, res[i*3 + j]);
 
 
   static double A[9] = {0.5, -0.5, 0, 
@@ -153,8 +157,8 @@ void gen_element_matrix(double * res, double *x, double *y, int t[3]) {
 
 
 matrix_s gen_fem_mat(double *x, double *y, int n_vert,
-		                 int * t[3], int n_tri) {
-	matrix_s result = mat_create(n_vert, n_vert);
+		                 triangle * t, int n_tri) {
+	matrix_s result = mat_init(n_vert, n_vert);
 	for (int k = 0; k < n_tri; k++) {
 		//Calculate element matrix for triangle t[k]
 		double el_mat[3*3];
@@ -182,12 +186,12 @@ int proc_count(proc_set set) {
 
 /* Add a processor to a set */
 void proc_add(proc_set * set, int proc) {
-  (*proc_set) |= 1 << proc;
+  (*set) |= 1 << proc;
 }
 
 /* Remove a processor from a set */
 void proc_remove(proc_set * set, int proc) {
-	(*proc_set) &= (1 << proc);
+	(*set) &= (1 << proc);
 }
 
 /* Returns whether a given processor is in a set */
@@ -288,8 +292,8 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 			bsp_put(proc, &n_vert_proc[proc],   &result.n_vert  , 0, SZINT);
 			bsp_put(proc, &n_shared_proc[proc], &result.n_shared, 0, SZINT);
 			bsp_put(proc, &n_tri_proc[proc],    &result.n_tri,    0, SZINT);
+			bsp_put(proc, &mesh->n_vert, &result.n_vert_total, 0, SZINT);
 		}
-		bsp_put(proc, &mesh->n_vert, &result.n_vert_total, 0, SZINT);
 	}
 	bsp_sync();
 	//Every processor now knows the amount of vertices (shared/owned) and amount of triangles it holds.
@@ -318,8 +322,9 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 
 	if (s == 0) {
 		/* Keep track of a counter per proccesor, so we know what index we should put items */
-		int vert_cntr[p] = {0};
-		int tri_cntr[p]  = {0};
+		int vert_cntr[p], tri_cntr[p];
+		memset(vert_cntr, 0, sizeof(int) * p);
+		memset(tri_cntr, 0, sizeof(int) * p);
 		//Push triangles
 		for (int i = 0; i < mesh->n_tri; i++)
 			bsp_put(mesh->p[i], &mesh->t[i], result.t, tri_cntr[i]++, sizeof(result.t[0]));
@@ -340,7 +345,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
 					bsp_put(proc, &vert_proc[v], result.p_shared, vert_cntr[proc], SZDBL);
 					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
-					bsp_put(proc, &b,            result.b, vert_cntr[proc], SZINT);
+					bsp_put(proc, &mesh->b[v],            result.b, vert_cntr[proc], SZINT);
 					vert_cntr[proc]++;
 			}
 		}
@@ -352,7 +357,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 				bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc], SZDBL);
 				bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc], SZDBL);
 				bsp_put(proc, &v,            result.i_glob, vert_cntr[proc], SZINT);
-				bsp_put(proc, &b,            result.b, vert_cntr[proc], SZINT);
+				bsp_put(proc, &mesh->b[v],            result.b, vert_cntr[proc], SZINT);
 				vert_cntr[proc]++;
 			}
 	}
@@ -390,7 +395,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 
 #define DEBUG(...) { if ( use_debug && s == 0) printf(__VA_ARGS__); }
 
-void bspcg() {
+void bspfem() {
   double time_init, time_done, time_total;
   double time_before_mv, time_mv;
   double time_before_ip, time_ip;
@@ -432,7 +437,7 @@ void bspcg() {
 	bsp_pop_reg(&use_time);
 
 	//TODO: Load mesh_from file
-	mesh_total = load_mesh_distribution_from_file(meshbuffer);
+	//mesh_total = load_mesh_distribution_from_file(meshbuffer);
 	fem = bsp_fem_init(s,p, &mesh_total);
 
 	if (use_debug) {
@@ -654,7 +659,6 @@ int main(int argc, char *argv[]) {
 	meshbuffer  = malloc(BUFFERSTRSIZE);
 	snprintf( meshbuffer, BUFFERSTRSIZE, "%s", argv[1]);
 	bspfem();
-  bspcg();
 	free(meshbuffer);
   exit(0);
 }

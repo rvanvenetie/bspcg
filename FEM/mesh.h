@@ -16,6 +16,7 @@ typedef struct {
 } mesh_s;
 
 
+matrix_s mat_init(int n, int m);
 matrix_s * mat_create( int n, int m);
 int mat_append( matrix_s *mat, int i, int j, double val);
 #endif

@@ -2,17 +2,21 @@
 #include <stdio.h>
 #include "mesh.h"
 
+matrix_s mat_init(int n, int m) {
+	matrix_s mat;
+  mat.nz = 0;
+  mat.n = n;
+  mat.m = m;
+  mat.lennz = 2;
+  mat.I = malloc( 2* sizeof( int));
+  mat.J = malloc( 2* sizeof( int));
+  mat.val = malloc( 2* sizeof( double));
+  return mat;
+}
 matrix_s * mat_create( int n, int m) {
   matrix_s *mat = malloc( sizeof( matrix_s));
-  mat->nz = 0;
-  mat->n = n;
-  mat->m = m;
-  mat->lennz = 2;
-  mat->I = malloc( 2* sizeof( int));
-  mat->J = malloc( 2* sizeof( int));
-  mat->val = malloc( 2* sizeof( double));
-
-  return mat;
+	mat = mat_init(n,m);
+	return mat;
 }
 
 int mat_append( matrix_s *mat, int i, int j, double val) {

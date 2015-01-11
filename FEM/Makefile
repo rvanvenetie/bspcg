@@ -13,14 +13,14 @@ LFLAGS=  -lpthread -lm  #-lrt
 #endif
 
 
-OBJ= fem.o $(IDIR)/bspedupack.o $(IDIR)/io.o $(IDIR)/bspmv.o $(IDIR)/bspip.o $(IDIR)/vec.o
+OBJ= mesh.o fem.o $(IDIR)/bspedupack.o $(IDIR)/io.o $(IDIR)/bspmv.o $(IDIR)/bspip.o $(IDIR)/vec.o
 
 %.o: %.c
 	$(CC) -I $(IDIR) -c $(CFLAGS) $<
 
 all: bsp fem
 
-fem: fem.o
+fem: $(OBJ)
 	$(CC) $(CFLAGS) -o fem $(OBJ) $(LFLAGS)
 
 bsp:
