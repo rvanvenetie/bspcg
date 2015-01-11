@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "mesh.h"
 
-matrix_s *create( int n, int m) {
+matrix_s * mat_create( int n, int m) {
   matrix_s *mat = malloc( sizeof( matrix_s));
   mat->nz = 0;
   mat->n = n;
@@ -15,7 +15,7 @@ matrix_s *create( int n, int m) {
   return mat;
 }
 
-int append( matrix_s *mat, int i, int j, double val) {
+int mat_append( matrix_s *mat, int i, int j, double val) {
   if( mat->lennz == mat->nz) {
     mat->I = realloc( mat->I, 2*mat->lennz * sizeof( int));
     mat->J = realloc( mat->J, 2*mat->lennz * sizeof( int));

@@ -1,7 +1,7 @@
 UNAME := $(shell whoami)
 WARNING_FLAGS=-Wall -Wextra -Werror-implicit-function-declaration -Wshadow -Wstrict-prototypes -pedantic
 CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
-IDIR = libs
+IDIR = ../libs
 LFLAGS=  -lpthread -lm  #-lrt
 
 ifeq ($(UNAME),raymond)
@@ -26,9 +26,9 @@ main: main.o
 gen: 
 	g++ rand_sym_mat.cpp -o rand_sym_mat
 bsp:
-	cd libs; make all;
+	cd $(IDIR); make all;
 
 clean:
 	rm -f *.o
 	rm -f main
-	cd libs; make clean;
+	cd $(IDIR); make clean;

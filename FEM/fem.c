@@ -4,11 +4,24 @@
 #include <math.h>
 #include <string.h>
 #include <libgen.h> 
+#include "mesh.h"
 #include "io.h"
 #include "vec.h"
 #include "bspmv.h"
 #include "bspip.h"
 #include "bspedupack.h"
+
+
+/* These variables may be acces by any processor */
+int kmax		 = 10000;
+int b_mode	 = B_ONES;
+double eps	 = 1E-8;
+int use_debug= 1;
+int use_time = 1;
+/* These variables may only be acces by s = 0 */
+int P        = 1;
+char * meshbuffer   = NULL;
+#define BUFERSTRSIZE 1024
 
 
 /*
@@ -58,6 +71,8 @@ typedef struct {
   int n_tri;    //Amount of triangles
 } mesh_dist;
 
+/* Functions to create a processor set */
+typedef long long unsigned int proc_set;
  
 /* Data structure for the data of each processor */
 typedef struct {
@@ -78,7 +93,7 @@ typedef struct {
 	int * glob2local;    //Lazy way to convert global to local indices 
   //int ** i_shared;		 //Array of (p,i_loc), giving the local index on processor p for this vertex
 
-  /* Triangles on this processor */
+  /* Triangles on this processor. Should be LOCAL indices */
   int * t[3]; 
   int n_tri; 
 
@@ -86,8 +101,79 @@ typedef struct {
   matrix_s mat;
 } bsp_fem_data;
 
-/* Functions to create a processor set */
-typedef long long unsigned int proc_set;
+
+void gen_element_matrix(double * res, double *x, double *y, int t[3]) {
+  //Dit is eigenlijk gewoon gelijk aan het product van twee matrices
+  //Minder duidelijk zo?
+  //http://en.wikipedia.org/wiki/Stiffness_matrix (Die matrix D onderin)
+  static double D[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
+											 y[t[2]] - y[t[1]], y[t[0]] - y[t[2]], y[t[1]] - y[t[0]]};
+  //Area triangle times 2
+  double area = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
+  //Calculate the upper part of Ak. Ak \gets area / 2.0 * D.T * D
+	double * C = res;
+  cblas_dsyrk('U', 'T', 3, 2, area / 2.0, D, 2, 0, C, 3);
+  //C should now hold the correct values??????
+  for (int i = 0; i < 3; i++)
+   for (int j = 0; j <= i; j++)
+     fprintf(stderr,"C[%d,%d] = %g\n", i,j, C[i*3 + j]);
+
+
+  static double A[9] = {0.5, -0.5, 0, 
+                        -0.5, 0.5, 0, 
+                        0, 0, 0};
+  static double B[9] = {1, -0.5, -0.5,
+                        -0.5, 0, 0.5,
+                        -0.5, 0.5, 0};
+  static double C[9] = {0.5, 0, -0.5,
+                        0, 0, 0,
+                        -0.5, 0, 0.5};
+  static double rhs[3] = {1.0/6.0};
+  int v1 = t[0];
+  int v2 = t[1];
+  int v3 = t[2];
+  double f11 = x[v2] - x[v1];
+  double f12 = x[v3] - x[v1];
+  double f21 = y[v2] - y[v1];
+  double f22 = y[v3] - y[v1];
+  double D = f11*f22 - f12*f21;
+  double E1 = f12*f12 + f22*f22;
+  double E2 = f11*f12 + f21*f22;
+  double E3 = f11*f11 + f21*f21;
+
+  for( int r = 0; r < 3; r++) {
+    for( int s = 0; s <= r; s++) {
+      double krs = 1/fabs( D) * (E1*A[r*3+s] - E2*B[r*3+s] + E3*C[r*3+s]); //TODO of dit moet een +E2 zijn
+      fprintf(stderr,"Bla[%d,%d] = %g\n", r,s, krs);
+    }
+
+    double gr = fabs(D) * rhs[r]; //local rhs component
+  }
+}
+
+
+matrix_s gen_fem_mat(double *x, double *y, int n_vert,
+		                 int * t[3], int n_tri) {
+	matrix_s result = mat_create(n_vert, n_vert);
+	for (int k = 0; k < n_tri; k++) {
+		//Calculate element matrix for triangle t[k]
+		double el_mat[3*3];
+		gen_element_matrix(el_mat, x,y,t[k]);
+
+		for (int li = 0; li < 3; li++)
+			for (int lj = 0; lj <= li; lj++) //Local indices in element matrix
+			{
+				int i = t[k][li];
+				int j = t[k][lj];
+				mat_append(&result, i, j, el_mat[i*3 + j]); 
+			}
+	}
+	/* TODO: Matrix is a list of (i,j,val) with duplicates in the list. Ideally 
+		 we want to use CRS storage, or at least filter the duplicates */
+	return result;
+}
+
+
 
 /* Count the amount of processors in a set */
 int proc_count(proc_set set) {
@@ -284,101 +370,23 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	for (int i = 0; i < result.n_vert; i++)
 		result.glob2local[result.i_glob[i]] = i;
 
+	/* Convert triangles to local indices */
+	for (int i =0; i < result.n_tri; i++)
+		for (int v=0; v < 3; v++)
+			result.t[i][v] = result.glob2local[result.t[i][v]];
+
 	/* Memory structure is now all set, lets produce the FEM matrix */
-	result.mat = gen_fem_mat(&result);
+	result.mat = gen_fem_mat(result.x, result.y, result.n_vert, 
+			                     result.t, result.n_tri);
 
 	/* We are DONE! */
 	bsp_sync();
 }
 
 
-generate_element_matrix( double *x, double *y, int t[3], int n) { //ofzo
-  //Dit is eigenlijk gewoon gelijk aan het product van twee matrices
-  //Minder duidelijk zo?
-  //http://en.wikipedia.org/wiki/Stiffness_matrix (Die matrix D onderin)
-  static double D[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
-											 y[t[2]] - y[t[1]], y[t[0]] - y[t[2]], y[t[1]] - y[t[0]]};
-  //Area triangle times 2
-  double area = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
-  //Calculate the upper part of Ak. Ak \gets area / 2.0 * D.T * D
-  double C[3*3];
-  cblas_dsyrk('U', 'T', 3, 2, area / 2.0, D, 2, 0, C, 3);
-  //C should now hold the correct values??????
-  for (int i = 0; i < 3; i++)
-   for (int j = 0; j <= i; j++)
-     fprintf(stderr,"C[%d,%d] = %g\n", i,j, C[i*3 + j]);
-
-
-  static double A[9] = {0.5, -0.5, 0, 
-                        -0.5, 0.5, 0, 
-                        0, 0, 0};
-  static double B[9] = {1, -0.5, -0.5,
-                        -0.5, 0, 0.5,
-                        -0.5, 0.5, 0};
-  static double C[9] = {0.5, 0, -0.5,
-                        0, 0, 0,
-                        -0.5, 0, 0.5};
-  static double rhs[3] = {1.0/6.0};
-  int v1 = t[n*3 + 0];
-  int v2 = t[n*3 + 1];
-  int v3 = t[n*3 + 2];
-  double f11 = x[v2] - x[v1];
-  double f12 = x[v3] - x[v1];
-  double f21 = y[v2] - y[v1];
-  double f22 = y[v3] - y[v1];
-  double D = f11*f22 - f12*f21;
-  double E1 = f12*f12 + f22*f22;
-  double E2 = f11*f12 + f21*f22;
-  double E3 = f11*f11 + f21*f21;
-
-  for( int r = 0; r < 3; r++) {
-    for( int s = 0; s <= r; s++) {
-      double krs = 1/fabs( D) * (E1*A[r*3+s] - E2*B[r*3+s] + E3*C[r*3+s]); //TODO of dit moet een +E2 zijn
-      fprintf(stderr,"Bla[%d,%d] = %g\n", r,s, krs);
-    }
-
-    double gr = fabs(D) * rhs[r]; //local rhs component
-  }
-}
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#define B_ONES 0
-#define B_LOAD 1
-#define B_AX 2
-#define B_RAND 3
-/* Below we have set the default values for the parameters of this program */
-
-/* These variables may be acces by any processor */
-int kmax		 = 10000;
-int b_mode	 = B_ONES;
-double eps	 = 1E-8;
-int use_debug= 1;
-int use_time = 1;
-/* These variables may only be acces by s = 0 */
-int P        = 1;
-
-
-char * matbuffer    = NULL;
-char * vecdisbuffer = NULL;
-char * vecvalbuffer = NULL;
-#define BUFERSTRSIZE 1024
 
 #define DEBUG(...) { if ( use_debug && s == 0) printf(__VA_ARGS__); }
 
@@ -393,10 +401,8 @@ void bspcg() {
   double *x; //Holds the approximate solution
   double *u; //Used in the algorithm to update x
   double *w; //Used in the algorithm to calculate alpha
-  distributed_matrix mat;  //Stores the `local' matrix.
-  vector_distribution dis; //Stores the vector distribution
-	//Arrays needed for bspmv
-	int *srcprocv, *srcindv, *destprocu, *destindu;
+	bsp_fem_data fem; //Stores the `local' FEM data
+	mesh_dist mesh_total; //Processor 0 uses this
 
   bsp_begin(P);
   p= bsp_nprocs(); /* p = number of processors obtained */
@@ -415,7 +421,6 @@ void bspcg() {
 	bsp_get(0, &b_mode, 0, &b_mode, SZINT);
 	bsp_get(0, &kmax  , 0, &kmax  , SZINT);
 	bsp_get(0, &eps   , 0, &eps   , SZDBL);
-
 	bsp_get(0, &use_debug, 0, &use_debug, SZINT);
 	bsp_get(0, &use_time , 0, &use_time , SZINT);
 	bsp_sync();
@@ -426,27 +431,19 @@ void bspcg() {
 	bsp_pop_reg(&use_debug);
 	bsp_pop_reg(&use_time);
 
-  /* Read matrix/vector distribution&values from file */
-  mat = load_symm_distributed_matrix_from_file( matbuffer, p, s);
-	dis = load_vector_distribution_from_file( vecdisbuffer, vecvalbuffer, p, s, &b);
+	//TODO: Load mesh_from file
+	mesh_total = load_mesh_distribution_from_file(meshbuffer);
+	fem = bsp_fem_init(s,p, &mesh_total);
 
 	if (use_debug) {
-      printf( "s/p: %d/%d\n"
-					    "\tkmax: %d\n"
-							"\teps : %g\n"
-							"\tmat.n: %d\n"
-							"\tmat.nz: %d\n"
-							"\tmat.nrows: %d\n"
-							"\tmat.ncols: %d\n"
-							"\tdis.n: %d\n"
-							"\tdis.nv: %d\n"
-							, s,p,kmax,eps, mat.n, mat.nz, mat.nrows, mat.ncols, dis.n, dis.nv);
+		//PRINT FEM DATA HERE
 	}
 	bsp_sync();
 	/* Matrix, vector dist and b is loaded */
 	/* Loading phase done, bsp_sync, add timer?*/
 
 	/* Initalize bsp_mv */
+	/*
   srcprocv  = vecalloci(mat.ncols);
   srcindv   = vecalloci(mat.ncols);
   destprocu = vecalloci(mat.nrows);
@@ -500,13 +497,15 @@ void bspcg() {
   double normbsq = rho;
 
   time_init = bsp_time();
+	*/
 	/* All initalization is done, start the main loop */
+	/*
   while( rho > eps*eps*normbsq && k < kmax) {
     double beta, gamma, alpha;
     DEBUG("Iteration %d, rho = %g\n", k + 1, rho);
     if( k > 0) {
       beta = rho/rho_old;
-      /* u \gets r + beta u */
+      // u \gets r + beta u 
 			
 			// u \gets \beta u
       vec_scale(dis.nv, beta, u);
@@ -553,7 +552,7 @@ void bspcg() {
   } else {
     DEBUG("CG stopped, maximum iterations (%i) reached. rho = %g\n", k, rho);
   }
-
+	*/
 	/*
 	 * We now give processor zero the solution vector.
 	 * Note that we probably do not want to do this in the real
@@ -562,7 +561,7 @@ void bspcg() {
 
 	 * We have this step mainly for timing
 	 */
-
+	/*
 	double * x_glob;
 	x_glob = vecallocd(dis.n);
 	bsp_push_reg(x_glob, dis.n*SZDBL);
@@ -612,18 +611,18 @@ void bspcg() {
 		printf("%s" "\t%d" "\t%d" "\t%d"    "\t%6f"	"\t%d"	"\t%6f"		 "\t%6f" 		"\t%6f"	 "\t%6f"		"\t%6f"					"\t%6f"   "\t%6f\n",
 				basename(matbuffer), p, mat.n, mat.nzA,density,k,time_init,time_iter,time_glob,time_total, time_it_local,time_mv,time_ip);
   }
-
+	*/
   bsp_end();
 }
 
 
 int main(int argc, char *argv[]) {
-  bsp_init(bspcg,argc, argv); //Execute after we start with initalization
+  bsp_init(bspfem,argc, argv); //Execute after we start with initalization
 	P = bsp_nprocs();
 	if(!(argc == 2 || argc == 3 || argc == 6 || argc == 8))
 	{
 		fprintf(stderr, "Invalid arguments given\n"
-				            "\tUsage: %s mtx_file [P [b_mode kmax eps [use_time use_debug]]]\n"
+				            "\tUsage: %s mesh file [P [b_mode kmax eps [use_time use_debug]]]\n"
 										"\tDefault parameters:\n"
 										"\t\tP=%d\n"
 										"\t\tb_mode=%d\n"
@@ -652,18 +651,10 @@ int main(int argc, char *argv[]) {
 		use_debug = atoi(argv[7]);
 	}
 
-
-	matbuffer   =  malloc(BUFERSTRSIZE);
-	vecdisbuffer=  malloc(BUFERSTRSIZE);
-	snprintf( matbuffer,    1024, "%s-P%d", argv[1], P);
-	snprintf( vecdisbuffer, 1024, "%s-u%d", argv[1], P);
-	if (b_mode == B_LOAD) {
-		vecvalbuffer=  malloc(BUFERSTRSIZE);
-		snprintf( vecvalbuffer, 1024, "%s-b"  , argv[1]);
-	}
+	meshbuffer  = malloc(BUFFERSTRSIZE);
+	snprintf( meshbuffer, BUFFERSTRSIZE, "%s", argv[1]);
+	bspfem();
   bspcg();
-	free(matbuffer);
-	free(vecdisbuffer);
-	free(vecvalbuffer);
+	free(meshbuffer);
   exit(0);
 }
