@@ -62,19 +62,6 @@ char * meshbuffer   = NULL;
 	 * TODO: Even out the amount of vertices owned by a processor, this implies
 	 * a better distribution of the vector among the processors. 
 	 */
-typedef int triangle[3];
-/* Data structure for the (distributed) triangulation */
-typedef struct {
-  /* Vertices */
-  double *x, *y;//Coordinates
-	int * b;      //Lies on boundary of domain?
-  int n_vert;   //Amount of vertices
-  
-  /* Triangles */
-  triangle * t;   //Triangles consist of three vertices
-  int * p;      //Processor that is owner of this triangle
-  int n_tri;    //Amount of triangles
-} mesh_dist;
 
 /* Functions to create a processor set */
 typedef long long unsigned int proc_set;
@@ -173,7 +160,9 @@ matrix_s gen_fem_mat(double *x, double *y, int dof,
 			{
 				int i = t[k][li];
 				int j = t[k][lj];
-				mat_append(&result, i, j, el_mat[i*3 + j]); 
+				//i and j hold the vertex index, only store if they account for a DOF
+				if (i < dof && j < dof)
+					mat_append(&result, i, j, el_mat[i*3 + j]); 
 			}
 	}
 	/* TODO: Matrix is a list of (i,j,val) with duplicates in the list. Ideally 
@@ -482,7 +471,7 @@ double bsp_fem_ip(int p, int s,  //Processor information
 		if (s == proc_owner(fem->p_shared[i])) //We own this shared vertex
 			inprod_local += fem->x[i] * fem->y[i];
 
-	for (int i = fem->n_shared; i < fem->n_vert; i++) 
+	for (int i = fem->n_shared; i < fem->n_shared + fem->n_own; i++) //Loop over owned vertices
 		inprod_local += fem->x[i] * fem->y[i];
 
   //Put the local value in all the processors
@@ -503,6 +492,19 @@ double bsp_fem_ip(int p, int s,  //Processor information
   return inprod_local;
 } 
 
+void print_mesh_dist(mesh_dist mesh) {
+	printf("(x,y) : boundary\n");
+	for (int i = 0; i < mesh.n_vert; i++) {
+		printf("(%3f, %3f): %d\n", mesh.x[i], mesh.y[i], mesh.b[i]);
+	}
+	printf("(v1,v2,v3) : proc\n");
+	for (int i = 0; i < mesh.n_tri; i++) {
+		printf("(%d, %d, %d) : %d\n", mesh.t[i][0], mesh.t[i][1], mesh.t[i][2], mesh.p[i]);
+	}
+	printf("n_vert: %d\n", mesh.n_vert);
+	printf("n_tri:  %d\n", mesh.n_tri);
+	printf("p: %d\n", mesh.P);
+}
 
 #define DEBUG(...) { if ( use_debug && s == 0) printf(__VA_ARGS__); }
 
@@ -548,12 +550,18 @@ void bspfem() {
 	bsp_pop_reg(&use_time);
 
 	//TODO: Load mesh_from file
-	//mesh_total = load_mesh_distribution_from_file(meshbuffer);
+	if (s == 0) {
+		FILE * mesh_buf = fopen(meshbuffer, "r"); //TODO: FILE --> FILENAME
+		mesh_total = readfrommeshfile(mesh_buf);
+		fclose(mesh_buf);
+		if (use_debug) 
+			print_mesh_dist(mesh_total);
+	}
 	fem = bsp_fem_init(s,p, &mesh_total);
 
-	if (use_debug) {
+	if (use_debug)
+		printf("FEM_DATA_%D", s);
 		//PRINT FEM DATA HERE
-	}
 	bsp_sync();
 	/* Matrix, vector dist and b is loaded */
 	/* Loading phase done, bsp_sync, add timer?*/
@@ -768,7 +776,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	meshbuffer  = malloc(BUFFERSTRSIZE);
-	snprintf( meshbuffer, BUFFERSTRSIZE, "%s", argv[1]);
+	snprintf( meshbuffer, BUFFERSTRSIZE, "%s-P%d", argv[1], P);
 	bspfem();
 	free(meshbuffer);
   exit(0);
