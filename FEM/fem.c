@@ -13,13 +13,10 @@
 #include "bspedupack.h"
 #include "fem.h"
 
-#define B_ONES 0
-#define B_LOAD 1
-#define B_AX 2
-#define B_RAND 3
+
+#define SUPER_DEBUG 0
 /* These variables may be acces by any processor */
 int kmax		 = 10000;
-int b_mode	 = B_ONES;
 double eps	 = 1E-8;
 int use_debug= 1;
 int use_time = 1;
@@ -52,14 +49,11 @@ char * meshbuffer   = NULL;
  *
  * - Matrix distribution: We calculate the FEM-matrix. We now
  *
-*/
-
-	/*
-	 * If a vertex is shared among multiple processors we have to decide who
-	 * is going to be the 'owner' of the vertex. We simply give the processor
-	 * with the smallest number the owner. 
-	 * 
-	 */
+ * If a vertex is shared among multiple processors we have to decide who
+ * is going to be the 'owner' of the vertex. We simply give the processor
+ * with the smallest number the owner. 
+ * 
+ */
 
  
 
@@ -95,7 +89,8 @@ matrix_s gen_fem_mat(bsp_fem_data * fem, double *x, double *y, int dof,
 		rhs[i] = 0.0;
 	matrix_s result = mat_init(dof, dof);
 	for (int k = 0; k < n_tri; k++) {
-		//fprintf(stderr,"(%d, %d, %d)\n",  fem->i_glob[t[k][0]],fem->i_glob[t[k][1]],fem->i_glob[t[k][2]]);
+		if (SUPER_DEBUG) 
+			printf("Element matrix triangle: (%d, %d, %d)\n",  fem->i_glob[t[k][0]],fem->i_glob[t[k][1]],fem->i_glob[t[k][2]]);
 		//Calculate element matrix for triangle t[k]
 		double el_mat[3*3];
 		gen_element_matrix(el_mat, x,y,t[k],dof,  rhs);
@@ -104,8 +99,10 @@ matrix_s gen_fem_mat(bsp_fem_data * fem, double *x, double *y, int dof,
 			{
 				int i = t[k][li];
 				int j = t[k][lj];
+			
+				if (SUPER_DEBUG)
+				  printf("el_mat[%d,%d] = %.2f\n", li,lj, el_mat[li*3+lj]);
 
-				//fprintf(stderr,"el_mat[%d,%d] = %.2f\n", li,lj, el_mat[li*3+lj]);
 				//i and j hold the vertex index, only store if they account for a DOF
 				if (i < dof && j < dof)
 					mat_append(&result, i, j, el_mat[li*3 +lj]); 
@@ -276,13 +273,14 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	bsp_push_reg(result.i_glob,   SZINT * result.n_vert);
 	bsp_push_reg(result.p_shared, sizeof(proc_set) * result.n_shared);
 	bsp_push_reg(result.t,        sizeof(triangle) * result.n_tri);
-	fprintf(stderr,"%d\n"
-			    "\tn_own:%d\n"
-					"\tn_shared:%d\n"
-					"\tn_bound:%d\n"
-					"\tn_tri:%d\n"
-					"\tn_vert_total:%d\n",
-					s, result.n_own, result.n_shared, result.n_bound, result.n_tri, result.n_vert_total);
+	if (SUPER_DEBUG)
+		printf("%d\n"
+						"\tn_own:%d\n"
+						"\tn_shared:%d\n"
+						"\tn_bound:%d\n"
+						"\tn_tri:%d\n"
+						"\tn_vert_total:%d\n",
+						s, result.n_own, result.n_shared, result.n_bound, result.n_tri, result.n_vert_total);
 	bsp_sync(); 
 
 	//Lets push the data to the corresponding processors!
@@ -302,7 +300,8 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 				int proc = -1;
 				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 				{
-					//fprintf(stderr,"Processor %d gets shared_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
+					if (SUPER_DEBUG)
+						printf("Processor %d gets shared_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
 					/* All the processors sharing vertex v need:
 					 * - The coordinates of v
 					 * - Boundary vertex
@@ -320,7 +319,8 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 		for (int v = 0; v < mesh->n_vert; v++)
 			if (!mesh->b[v] && proc_count(vert_proc[v]) == 1) { //Non-shared vertex
 				int proc = proc_next(vert_proc[v], -1);
-				//fprintf(stderr,"Processor %d gets own_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
+				if (SUPER_DEBUG)
+					printf("Processor %d gets own_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
 				bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc] * SZDBL, SZDBL);
 				bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc] * SZDBL, SZDBL);
 				bsp_put(proc, &v,            result.i_glob, vert_cntr[proc] * SZINT, SZINT);
@@ -333,7 +333,8 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 				int proc = -1;
 				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 				{
-					//fprintf(stderr,"Processor %d gets bound_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
+					if (SUPER_DEBUG)
+						printf("Processor %d gets bound_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
 					bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc] * SZDBL, SZDBL);
 					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc] * SZDBL, SZDBL);
 					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc] * SZINT, SZINT);
@@ -343,8 +344,9 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	}
 	bsp_sync();
 
-	//for (int i = 0; i < result.n_tri; i++)
-	//	fprintf(stderr, "%d : (%d, %d, %d)\n", s, result.t[i][0], result.t[i][1], result.t[i][2]);
+	if (SUPER_DEBUG) 
+		for (int i = 0; i < result.n_tri; i++)
+			printf("%d : (%d, %d, %d)\n", s, result.t[i][0], result.t[i][1], result.t[i][2]);
 	/* Every processor has all the elements. Now convert global indexing to local indexing */
 	bsp_pop_reg(result.x);
 	bsp_pop_reg(result.y);
@@ -355,8 +357,9 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	for (int i = 0; i < result.n_vert_total; i++)
 		result.glob2local[i] = -1;
 	for (int i = 0; i < result.n_vert; i++) {
-		//fprintf(stderr, "%d : (%3f, %3f) \t loc:%d glob:%d\n",
-				             //s, result.x[i], result.y[i], i, result.i_glob[i]);
+		if (SUPER_DEBUG)
+			printf("%d : (%3f, %3f) \t loc:%d glob:%d\n",
+				           s, result.x[i], result.y[i], i, result.i_glob[i]);
 		result.glob2local[result.i_glob[i]] = i;
 	}
 	/* Convert triangles to local indices */
@@ -421,10 +424,13 @@ void bsp_fem_shared_dof_sum(int s, bsp_fem_data * fem, double * v) {
 }
 //Calculate v = Au using our FEM-stuff
 void bsp_fem_mv(int s,mesh_dist * mesh_total,  bsp_fem_data * fem, double * v, double * u) {
-	//print_fem_vect(s,"u in v=Au", fem, mesh_total, u);
 	ssmv(v, &fem->mat, u);
 	bsp_fem_shared_dof_sum(s, fem, v); //Sum the shared vertices
-	//print_fem_vect(s,"v in v=Au", fem, mesh_total, v);
+
+	if (SUPER_DEBUG) {
+	  print_fem_vect(s,"u in v=Au", fem, mesh_total, u);
+	  print_fem_vect(s,"v in v=Au", fem, mesh_total, v);
+	}
 }
 
 double bsp_fem_ip(int p, int s,  //Processor information  
@@ -523,10 +529,11 @@ void print_fem_vect(int s, char * name, bsp_fem_data * fem, mesh_dist * mesh_tot
 		for (int i = 0; i < mesh_total->n_vert; i++)
 			if (!mesh_total->b[i])
 				x_glob[dof_cntr++] = x_glob[i];
-		printf("FEM Vector %s:\n[", name);
+		fprintf(stdout,"FEM Vector %s:\n[", name);
 		for (int i = 0; i < dof_cntr; i++)
-			printf("%.3f ", x_glob[i]);
-		printf("]\n");
+			fprintf(stderr,"%.5f\n", x_glob[i]);
+		fprintf(stdout, "]\n");
+		//printf("]\n");
 		vecfreed(x_glob);
 	}
 }
@@ -588,19 +595,20 @@ void print_fem_data(int s, bsp_fem_data result, mesh_dist * mesh_total) {
 					"\tn_tri:%d\n"
 					"\tn_vert_total:%d\n",
 					s, result.n_own, result.n_shared, result.n_bound, result.n_vert, result.dof, result.n_tri, result.n_vert_total);
-  //Print vertices
-	for (int i = 0; i < result.n_vert; i++) 
-		fprintf(stderr, "%d : (%3f, %3f) \t loc:%d glob:%d\n",
-				             s, result.x[i], result.y[i], i, result.i_glob[i]);
-	//Print triangles
-	for (int i = 0; i < result.n_tri; i++)
-		fprintf(stderr, "%d : (%d, %d, %d)\n", s, result.t[i][0], result.t[i][1], result.t[i][2]);
+	if (SUPER_DEBUG) {
+    //Print vertices
+		for (int i = 0; i < result.n_vert; i++) 
+			printf( "%d : (%3f, %3f) \t loc:%d glob:%d\n",
+					s, result.x[i], result.y[i], i, result.i_glob[i]);
+	  //Print triangles
+		for (int i = 0; i < result.n_tri; i++)
+			printf("%d : (%d, %d, %d)\n", s, result.t[i][0], result.t[i][1], result.t[i][2]);
 
-	bsp_sync();
-	printf("\n\n");
-	print_fem_mat(s, "FEM Matrix", &result, mesh_total);
-	print_fem_vect(s, "FEM Rhs", &result, mesh_total, result.rhs);
-	printf("\n\n");
+		printf("\n\n");
+		print_fem_mat(s, "FEM Matrix", &result, mesh_total);
+		print_fem_vect(s, "FEM Rhs", &result, mesh_total, result.rhs);
+		printf("\n\n");
+	}
 }
 
 
@@ -625,7 +633,6 @@ void bspfem() {
 	/* Communicate the parameters of this program */
 
 	//Push variable names
-	bsp_push_reg(&b_mode,			SZINT);
 	bsp_push_reg(&kmax,				SZINT);
 	bsp_push_reg(&eps,				SZDBL);
 	bsp_push_reg(&use_debug,  SZINT);
@@ -633,14 +640,12 @@ void bspfem() {
 	bsp_sync();
 
 	//Read values from s = 0
-	bsp_get(0, &b_mode, 0, &b_mode, SZINT);
 	bsp_get(0, &kmax  , 0, &kmax  , SZINT);
 	bsp_get(0, &eps   , 0, &eps   , SZDBL);
 	bsp_get(0, &use_debug, 0, &use_debug, SZINT);
 	bsp_get(0, &use_time , 0, &use_time , SZINT);
 	bsp_sync();
 
-	bsp_pop_reg(&b_mode);
 	bsp_pop_reg(&kmax);
 	bsp_pop_reg(&eps);
 	bsp_pop_reg(&use_debug);
@@ -651,8 +656,8 @@ void bspfem() {
 		FILE * mesh_buf = fopen(meshbuffer, "r"); //TODO: FILE --> FILENAME
 		mesh_total = readfrommeshfile(mesh_buf);
 		fclose(mesh_buf);
-		//if (use_debug) 
-			//print_mesh_dist(mesh_total);
+		if (SUPER_DEBUG) 
+			print_mesh_dist(mesh_total);
 	}
 	fem = bsp_fem_init(s,p, &mesh_total);
 
@@ -679,7 +684,6 @@ void bspfem() {
   //Rho used in algo, initial rho = <r,r> = <b,b>
   double rho, rho_old;
 	rho = bsp_fem_ip(p,s,r,r, &fem);
-	//fprintf(stderr, "<r,r>: %.3f\n", rho);
   //We store |b|^2 to calculate the relative norm of r
   //|b|^2 = <b,b> = rho
   double normbsq = rho;
@@ -708,10 +712,8 @@ void bspfem() {
     time_before_ip = bsp_time();
 		gamma = bsp_fem_ip(p,s, u,w, &fem);
     time_ip += bsp_time() - time_before_ip;
-		//printf("Gamma %.3f\n", gamma);
     alpha = rho/gamma;
 
-		//printf("Alpha %.3f\n", alpha);
     //  x \gets x + alpha u
 
     vec_axpy(fem.dof, alpha, u, x); 
@@ -719,8 +721,6 @@ void bspfem() {
     //  r \gets r - alpha w
     vec_axpy(fem.dof, - alpha, w, r); 
 
-		//print_fem_vect(s,"x", &fem, &mesh_total, x);
-		//print_fem_vect(s,"r", &fem, &mesh_total, r);
     rho_old = rho;
     // \rho \gets <r ,r>
 
@@ -738,7 +738,8 @@ void bspfem() {
   } else {
     DEBUG("CG stopped, maximum iterations (%i) reached. rho = %g\n", k, rho);
   }
-	print_fem_vect(s,"x_solution", &fem, &mesh_total, x);
+	if (use_debug)
+		print_fem_vect(s,"x_solution", &fem, &mesh_total, x);
 	/*
 	 * We now give processor zero the solution vector.
 	 * Note that we probably do not want to do this in the real
@@ -803,18 +804,17 @@ void bspfem() {
 int main(int argc, char *argv[]) {
   bsp_init(bspfem,argc, argv); //Execute after we start with initalization
 	P = bsp_nprocs();
-	if(!(argc == 2 || argc == 3 || argc == 6 || argc == 8))
+	if(!(argc == 2 || argc == 3 || argc == 5 || argc == 6))
 	{
 		fprintf(stderr, "Invalid arguments given\n"
-				            "\tUsage: %s mesh file [P [b_mode kmax eps [use_time use_debug]]]\n"
+				            "\tUsage: %s mesh file [P [kmax eps [use_time use_debug]]]\n"
 										"\tDefault parameters:\n"
 										"\t\tP=%d\n"
-										"\t\tb_mode=%d\n"
 										"\t\tkmax=%d\n"
 										"\t\teps=%g\n"
 										"\t\tuse_time=%d\n"
 										"\t\tise_debug=%d\n",
-										argv[0],P,b_mode, kmax, eps, use_time, use_debug);
+										argv[0],P,kmax, eps, use_time, use_debug);
 		exit(1);
 	}
 	if (argc > 2) {
@@ -825,14 +825,13 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	if (argc > 3) {
-		b_mode = atoi(argv[3]);
-		kmax =   atoi(argv[4]);
-		eps  =   atof(argv[5]);
+		kmax =   atoi(argv[3]);
+		eps  =   atof(argv[4]);
 	}
 
 	if (argc > 6) {
-		use_time =  atoi(argv[6]);
-		use_debug = atoi(argv[7]);
+		use_time =  atoi(argv[5]);
+		use_debug = atoi(argv[6]);
 	}
 
 	meshbuffer  = malloc(BUFFERSTRSIZE);
