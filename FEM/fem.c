@@ -11,7 +11,7 @@
 #include "bspmv.h"
 #include "bspip.h"
 #include "bspedupack.h"
-
+#include "fem.h"
 
 #define B_ONES 0
 #define B_LOAD 1
@@ -59,120 +59,56 @@ char * meshbuffer   = NULL;
 	 * is going to be the 'owner' of the vertex. We simply give the processor
 	 * with the smallest number the owner. 
 	 * 
-	 * TODO: Even out the amount of vertices owned by a processor, this implies
-	 * a better distribution of the vector among the processors. 
 	 */
 
-/* Functions to create a processor set */
-typedef long long unsigned int proc_set;
-#define SZPROCSET sizeof(proc_set)
-#define SZTRI     sizeof(triangle)
  
-/* Data structure for the data of each processor */
-typedef struct {
-	/*
-	 * Vertices used in this processor. We have the following order:
-	 * 1) Shared vertices 
-	 * 2) Owned vertices
-	 * 3) Boundary vertices (all the vertices lying on the boundary
-	 */
-  double *x, *y;			 //Vertices 
-	int n_shared;        //Amount of shared vertices (not bound)
-	int n_own;           //Amount of owned vertices (not bound)
-	int n_bound;         //Amount of vertices on the boundary
-	int n_vert;          //Total amount of vertices (n_shared + n_own + n_bound)
-
-	int dof;					 	 //Degrees of freedom, in our case n_shared + n_own
-	proc_set * p_shared; //Processor sets for the shared vertices
-
-	int n_vert_total;    //Total amount of vertices in the system
-  int * i_glob;				 //Global index that corresponds to the local vertex
-	int * glob2local;    //Lazy way to convert global to local indices 
-
-  //int ** i_shared;		 //Array of (p,i_loc), giving the local index on processor p for this vertex
-
-  /* Triangles on this processor. Should be LOCAL indices */
-  int n_tri; 
-	triangle * t;
-
-  /* FEM matrix for this processor */
-  matrix_s mat;
-} bsp_fem_data;
 
 
-void gen_element_matrix(double * res, double *x, double *y, triangle t) {
+void gen_element_matrix(double * res, double *x, double *y, triangle t, int dof, double * rhs) {
   //http://en.wikipedia.org/wiki/Stiffness_matrix (Die matrix D onderin)
   double D_mat[] = {x[t[2]] - x[t[1]], x[t[0]] - x[t[2]], x[t[1]] - x[t[0]],
 	  							  y[t[2]] - y[t[1]], y[t[0]] - y[t[2]], y[t[1]] - y[t[0]]};
 
-  //Area triangle times 2, also det(coor_mat)
-  double area = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
-	double alpha = 1 / (2 * area);
+  //determinant affinetransformation times two.
+  double det = fabs((x[t[1]] - x[t[0]]) * (y[t[2]] - y[t[0]]) - (x[t[2]] - x[t[0]]) * (y[t[1]] - y[t[0]]));
+	double alpha = 1 / (2 * det);
 
 	//Element matrix is now given by: alpha * D.T * D.
 	//Only calculate lower tri part
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 3; i++) {
+		if (t[i] < dof)  //Update rhs for nodal function i over this triangle
+			rhs[t[i]] += det * 1.0/6.0;
+		
 		for (int j = 0; j <= i; j++)
 		{ 
 			//Row i of D.T times colum j of D
 			res[i*3 + j] = alpha * ( D_mat[i] * D_mat[j] + D_mat[i + 3] * D_mat[j+3]);
 		}
-	
-	/*
-  for (int i = 0; i < 3; i++)
-   for (int j = 0; j <= i; j++)
-     fprintf(stderr,"Res[%d,%d] = %g\n", i,j, res[i*3 + j]);
+	}
 
-  static double A[9] = {0.5, -0.5, 0, 
-                        -0.5, 0.5, 0, 
-                        0, 0, 0};
-  static double B[9] = {1, -0.5, -0.5,
-                        -0.5, 0, 0.5,
-                        -0.5, 0.5, 0};
-  static double C[9] = {0.5, 0, -0.5,
-                        0, 0, 0,
-                        -0.5, 0, 0.5};
-  static double rhs[3] = {1.0/6.0};
-  int v1 = t[0];
-  int v2 = t[1];
-  int v3 = t[2];
-  double f11 = x[v2] - x[v1];
-  double f12 = x[v3] - x[v1];
-  double f21 = y[v2] - y[v1];
-  double f22 = y[v3] - y[v1];
-  double D = f11*f22 - f12*f21;
-  double E1 = f12*f12 + f22*f22;
-  double E2 = f11*f12 + f21*f22;
-  double E3 = f11*f11 + f21*f21;
-
-  for( int r = 0; r < 3; r++) {
-    for( int s = 0; s <= r; s++) {
-      double krs = 1/fabs( D) * (E1*A[r*3+s] - E2*B[r*3+s] + E3*C[r*3+s]); //TODO of dit moet een +E2 zijn
-      fprintf(stderr,"Bla[%d,%d] = %g\n", r,s, krs);
-    }
-
-    double gr = fabs(D) * rhs[r]; //local rhs component
-		fprintf(stderr,"Bla_rhs[%d] = %g\n", r, gr);
-  }
-	*/
 }
 
 
-matrix_s gen_fem_mat(double *x, double *y, int dof,
-		                 triangle * t, int n_tri) {
+matrix_s gen_fem_mat(bsp_fem_data * fem, double *x, double *y, int dof,
+		                 triangle * t, int n_tri, double * rhs) {
+	for (int i = 0; i < dof; i++)
+		rhs[i] = 0.0;
 	matrix_s result = mat_init(dof, dof);
 	for (int k = 0; k < n_tri; k++) {
+		//fprintf(stderr,"(%d, %d, %d)\n",  fem->i_glob[t[k][0]],fem->i_glob[t[k][1]],fem->i_glob[t[k][2]]);
 		//Calculate element matrix for triangle t[k]
 		double el_mat[3*3];
-		gen_element_matrix(el_mat, x,y,t[k]);
+		gen_element_matrix(el_mat, x,y,t[k],dof,  rhs);
 		for (int li = 0; li < 3; li++)
 			for (int lj = 0; lj <= li; lj++) //Local indices in element matrix
 			{
 				int i = t[k][li];
 				int j = t[k][lj];
+
+				//fprintf(stderr,"el_mat[%d,%d] = %.2f\n", li,lj, el_mat[li*3+lj]);
 				//i and j hold the vertex index, only store if they account for a DOF
 				if (i < dof && j < dof)
-					mat_append(&result, i, j, el_mat[i*3 + j]); 
+					mat_append(&result, i, j, el_mat[li*3 +lj]); 
 			}
 	}
 	/* TODO: Matrix is a list of (i,j,val) with duplicates in the list. Ideally 
@@ -262,6 +198,7 @@ void fem_data_free(bsp_fem_data * fem) {
 	free(fem->i_glob);
 	free(fem->glob2local);
 	free(fem->t);
+	free(fem->rhs);
 	mat_free(&fem->mat);
 }
 
@@ -365,6 +302,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 				int proc = -1;
 				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 				{
+					//fprintf(stderr,"Processor %d gets shared_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
 					/* All the processors sharing vertex v need:
 					 * - The coordinates of v
 					 * - Boundary vertex
@@ -380,8 +318,9 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 
 		//Push non-shared vertices
 		for (int v = 0; v < mesh->n_vert; v++)
-			if (proc_count(vert_proc[v]) == 0) { //Non-shared vertex
+			if (!mesh->b[v] && proc_count(vert_proc[v]) == 1) { //Non-shared vertex
 				int proc = proc_next(vert_proc[v], -1);
+				//fprintf(stderr,"Processor %d gets own_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
 				bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc] * SZDBL, SZDBL);
 				bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc] * SZDBL, SZDBL);
 				bsp_put(proc, &v,            result.i_glob, vert_cntr[proc] * SZINT, SZINT);
@@ -394,6 +333,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 				int proc = -1;
 				while ((proc = proc_next(vert_proc[v], proc+1)) != -1) 
 				{
+					//fprintf(stderr,"Processor %d gets bound_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
 					bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc] * SZDBL, SZDBL);
 					bsp_put(proc, &mesh->y[v],	 result.y, vert_cntr[proc] * SZDBL, SZDBL);
 					bsp_put(proc, &v,            result.i_glob, vert_cntr[proc] * SZINT, SZINT);
@@ -402,8 +342,9 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 			}
 	}
 	bsp_sync();
-	for (int i = 0; i < result.n_tri; i++)
-		fprintf(stderr, "%d : (%d, %d, %d)\n", s, result.t[i][0], result.t[i][1], result.t[i][2]);
+
+	//for (int i = 0; i < result.n_tri; i++)
+	//	fprintf(stderr, "%d : (%d, %d, %d)\n", s, result.t[i][0], result.t[i][1], result.t[i][2]);
 	/* Every processor has all the elements. Now convert global indexing to local indexing */
 	bsp_pop_reg(result.x);
 	bsp_pop_reg(result.y);
@@ -414,8 +355,8 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 	for (int i = 0; i < result.n_vert_total; i++)
 		result.glob2local[i] = -1;
 	for (int i = 0; i < result.n_vert; i++) {
-		fprintf(stderr, "%d : (%3f, %3f) \t loc:%d glob:%d\n",
-				             s, result.x[i], result.y[i], i, result.i_glob[i]);
+		//fprintf(stderr, "%d : (%3f, %3f) \t loc:%d glob:%d\n",
+				             //s, result.x[i], result.y[i], i, result.i_glob[i]);
 		result.glob2local[result.i_glob[i]] = i;
 	}
 	/* Convert triangles to local indices */
@@ -424,9 +365,12 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 			result.t[i][v] = result.glob2local[result.t[i][v]];
 	
 	/* Memory structure is now all set, lets produce the FEM matrix */
-	result.mat = gen_fem_mat(result.x, result.y, result.dof,
-			                     result.t, result.n_tri);
+	result.rhs = malloc(sizeof(double) * result.dof);
 
+	result.mat = gen_fem_mat(&result, result.x, result.y, result.dof,
+			                     result.t, result.n_tri, result.rhs);
+
+	bsp_fem_shared_dof_sum(s, &result, result.rhs);
 	/* We are DONE! */
 	return result;
 }
@@ -444,18 +388,18 @@ void ssmv(double * v, matrix_s * mat,  double * u) {
 	}
 }
 
-//Calculate v = Au using our FEM-stuff
-void bsp_fem_mv(int s, bsp_fem_data * fem, double * v, double * u) {
+/*
+ * Some vertices of the procesor are shared with others.
+ * This function sums the values of the shared indices of a vector.
+ * 
+ * We do this by sendin the local value to all shared processors with the global index
+ * as tag.
+ */
+void bsp_fem_shared_dof_sum(int s, bsp_fem_data * fem, double * v) {
 	int tagsz= SZINT;
 	bsp_set_tagsize(&tagsz);
 	bsp_sync();
 
-	ssmv(v, &fem->mat, u);
-	/*
-	 * For vertices shared by other processors we must communicate.
-	 * We therefore send the local value to all the shared processors with
-	 * the global index as tag
-	 */
 	for (int k = 0; k < fem->n_shared; k++) {
 		int proc = -1;
 		while ((proc = proc_next(fem->p_shared[k], proc+1)) != -1) 
@@ -463,16 +407,24 @@ void bsp_fem_mv(int s, bsp_fem_data * fem, double * v, double * u) {
 				bsp_send(proc, &fem->i_glob[k], &v[k], SZDBL);
 	}
 	bsp_sync();
+
 	int status, tag;
 	double tmp_val;
   bsp_get_tag(&status, &tag);
 	while (status != -1) { //Process all the messages
 		bsp_move(&tmp_val, SZDBL);
+
 		//Tag holds the global index, tmp_val the value
 		v[fem->glob2local[tag]] += tmp_val;
 		bsp_get_tag(&status, &tag);
 	}
-	//Done!
+}
+//Calculate v = Au using our FEM-stuff
+void bsp_fem_mv(int s,mesh_dist * mesh_total,  bsp_fem_data * fem, double * v, double * u) {
+	//print_fem_vect(s,"u in v=Au", fem, mesh_total, u);
+	ssmv(v, &fem->mat, u);
+	bsp_fem_shared_dof_sum(s, fem, v); //Sum the shared vertices
+	//print_fem_vect(s,"v in v=Au", fem, mesh_total, v);
 }
 
 double bsp_fem_ip(int p, int s,  //Processor information  
@@ -493,15 +445,14 @@ double bsp_fem_ip(int p, int s,  //Processor information
   inprod = vecallocd(p);
   bsp_push_reg(inprod, p * SZDBL);
   bsp_sync();
-
   //Calculate local inproduct
   inprod_local = 0;
 	for (int i = 0; i < fem->n_shared; i++)
 		if (s == proc_owner(fem->p_shared[i])) //We own this shared vertex
-			inprod_local += fem->x[i] * fem->y[i];
+			inprod_local += x[i] * y[i];
 
 	for (int i = fem->n_shared; i < fem->dof; i++) //Loop over owned vertices
-		inprod_local += fem->x[i] * fem->y[i];
+		inprod_local += x[i] * y[i];
 
   //Put the local value in all the processors
   for (int t = 0; t < p; t++) 
@@ -533,17 +484,110 @@ void print_mesh_dist(mesh_dist mesh) {
 	printf("n_vert: %d\n", mesh.n_vert);
 	printf("n_tri:  %d\n", mesh.n_tri);
 	printf("p: %d\n", mesh.P);
+
+	printf("N = np.array([");
+	for (int i = 0; i < mesh.n_vert; i++)
+		printf("[%.6f, %.6f]\n", mesh.x[i], mesh.y[i]);
+	printf("])\n");
+
+	printf("T = np.array([");
+	for (int i = 0; i < mesh.n_tri; i++)
+		printf("[%d, %d, %d]\n", mesh.t[i][0], mesh.t[i][1], mesh.t[i][2]);
+	printf("])\n");
+
+	printf("G = np.array([");
+	for (int i = 0; i < mesh.n_vert; i++)
+		printf("%d,",mesh.b[i]);
+	printf("])\n");
 }
 
-void print_fem_data(int s, bsp_fem_data result) {
+void print_fem_vect(int s, char * name, bsp_fem_data * fem, mesh_dist * mesh_total, double * x) {
+	double * x_glob = (double * ) 1337; //Hacky solution, otherwise BSP will struggle
+	if (s == 0)
+		x_glob = vecallocd(fem->n_vert_total);
+
+	bsp_push_reg(x_glob, fem->n_vert_total*SZDBL);
+	bsp_sync();
+
+	for (int i = 0; i < fem->n_shared; i++) //Only push shared vertex if we own it
+		if (s == proc_owner(fem->p_shared[i]))  
+			bsp_put(0, &x[i], x_glob, fem->i_glob[i] * SZDBL, SZDBL);
+		
+	for (int i = fem->n_shared; i < fem->dof; i++) 
+		bsp_put(0, &x[i], x_glob, fem->i_glob[i] * SZDBL, SZDBL);
+	
+	bsp_sync();
+	bsp_pop_reg(x_glob);
+	if (s == 0) { 
+		int dof_cntr = 0;
+		for (int i = 0; i < mesh_total->n_vert; i++)
+			if (!mesh_total->b[i])
+				x_glob[dof_cntr++] = x_glob[i];
+		printf("FEM Vector %s:\n[", name);
+		for (int i = 0; i < dof_cntr; i++)
+			printf("%.3f ", x_glob[i]);
+		printf("]\n");
+		vecfreed(x_glob);
+	}
+}
+
+void print_fem_mat(int s, char * name, bsp_fem_data * fem, mesh_dist * mesh_total) {
+	int tagsz= SZINT;
+	bsp_set_tagsize(&tagsz);
+	double * mat_full = (double *) 1337; //Hack solution
+	if (s == 0) 
+		mat_full = calloc(sizeof(double),fem->n_vert_total * fem->n_vert_total);
+
+	bsp_push_reg(mat_full, fem->n_vert_total*fem->n_vert_total * SZDBL);
+	bsp_sync();
+
+	//Every processor sends its matrix values to the main processor
+	for (int k = 0; k < fem->mat.nz; k++) {
+		int i = fem->i_glob[fem->mat.I[k]];
+		int j = fem->i_glob[fem->mat.J[k]];
+		int mat_idx = i*fem->n_vert_total + j;
+		bsp_send(0,  &mat_idx, &fem->mat.val[k], SZDBL);
+		if (i != j) { //Send it's transpose as well
+			mat_idx = j*fem->n_vert_total + i;
+			bsp_send(0,  &mat_idx, &fem->mat.val[k], SZDBL);
+		}
+	}
+	bsp_sync();
+	bsp_pop_reg(mat_full);
+	if (s == 0) {
+		int status, tag;
+		double tmp_val;
+		bsp_get_tag(&status, &tag);
+		while (status != -1) { //Process all the messages
+			bsp_move(&tmp_val, SZDBL);
+
+			//Tag holds the global index, tmp_val the value
+			mat_full[tag] += tmp_val;
+			bsp_get_tag(&status, &tag);
+		}
+		printf("FEM %s\n", name);
+		printf("[");
+		for (int i = 0; i < mesh_total->n_vert; i++)
+		  if (!mesh_total->b[i])  {
+				for (int j = 0; j < mesh_total->n_vert; j++)
+					if (!mesh_total->b[j]) 
+						printf("%.3f ", mat_full[i * mesh_total->n_vert + j]);
+				printf(";\n");
+			}
+		printf("]");
+	}
+
+}
+void print_fem_data(int s, bsp_fem_data result, mesh_dist * mesh_total) {
 	printf("%d\n"
 			    "\tn_own:%d\n"
 					"\tn_shared:%d\n"
 					"\tn_bound:%d\n"
+					"\tn_vert:%d\n"
 					"\tdof:%d\n"
 					"\tn_tri:%d\n"
 					"\tn_vert_total:%d\n",
-					s, result.n_own, result.n_shared, result.n_bound, result.dof, result.n_tri, result.n_vert_total);
+					s, result.n_own, result.n_shared, result.n_bound, result.n_vert, result.dof, result.n_tri, result.n_vert_total);
   //Print vertices
 	for (int i = 0; i < result.n_vert; i++) 
 		fprintf(stderr, "%d : (%3f, %3f) \t loc:%d glob:%d\n",
@@ -551,7 +595,14 @@ void print_fem_data(int s, bsp_fem_data result) {
 	//Print triangles
 	for (int i = 0; i < result.n_tri; i++)
 		fprintf(stderr, "%d : (%d, %d, %d)\n", s, result.t[i][0], result.t[i][1], result.t[i][2]);
+
+	bsp_sync();
+	printf("\n\n");
+	print_fem_mat(s, "FEM Matrix", &result, mesh_total);
+	print_fem_vect(s, "FEM Rhs", &result, mesh_total, result.rhs);
+	printf("\n\n");
 }
+
 
 #define DEBUG(...) { if ( use_debug && s == 0) printf(__VA_ARGS__); }
 
@@ -561,7 +612,6 @@ void bspfem() {
   double time_before_ip, time_ip;
   int p,s; //Defaults for bsp
   //Vectors local
-  double *b; //Holds rhs  
   double *r; //Holds the residual
   double *x; //Holds the approximate solution
   double *u; //Used in the algorithm to update x
@@ -601,22 +651,17 @@ void bspfem() {
 		FILE * mesh_buf = fopen(meshbuffer, "r"); //TODO: FILE --> FILENAME
 		mesh_total = readfrommeshfile(mesh_buf);
 		fclose(mesh_buf);
-		if (use_debug) 
-			print_mesh_dist(mesh_total);
+		//if (use_debug) 
+			//print_mesh_dist(mesh_total);
 	}
 	fem = bsp_fem_init(s,p, &mesh_total);
-	if (s == 0)
-		mesh_free(&mesh_total);
 
 	if (use_debug)
-		print_fem_data(s, fem);
-	/* FEM matrix is loaded, now give the RHS of the equation TODO: BETTER b */
-	b = vecallocd(fem.dof);
-	for (int i = 0; i < fem.dof; i++)
-		b[i] = 1;
+		print_fem_data(s, fem, &mesh_total);
+	/* FEM matrix + RHS are loaded */
 
   int k = 0; //Iterations
-  //Allocate vectors used in algorithm, b is already allocated
+  //Allocate vectors used in algorithm
   r = vecallocd(fem.dof); 
   u = vecallocd(fem.dof);
   x = vecallocd(fem.dof);
@@ -627,17 +672,17 @@ void bspfem() {
   for (int i = 0; i < fem.dof; i++) {
     x[i] = 0;
     u[i] = 0;
-    r[i] = b[i];
+    r[i] = fem.rhs[i];
   }
 
+		
   //Rho used in algo, initial rho = <r,r> = <b,b>
   double rho, rho_old;
 	rho = bsp_fem_ip(p,s,r,r, &fem);
-
+	//fprintf(stderr, "<r,r>: %.3f\n", rho);
   //We store |b|^2 to calculate the relative norm of r
   //|b|^2 = <b,b> = rho
   double normbsq = rho;
-
   time_init = bsp_time();
 	/* All initalization is done, start the main loop */
   while( rho > eps*eps*normbsq && k < kmax) {
@@ -656,22 +701,26 @@ void bspfem() {
 
     // w \gets Au
     time_before_mv = bsp_time();
-		bsp_fem_mv(s, &fem,w, u);
+		bsp_fem_mv(s,&mesh_total, &fem,w, u);
     time_mv += bsp_time() - time_before_mv;
 
     // \gamma \gets <u, w>
     time_before_ip = bsp_time();
 		gamma = bsp_fem_ip(p,s, u,w, &fem);
     time_ip += bsp_time() - time_before_ip;
-
+		//printf("Gamma %.3f\n", gamma);
     alpha = rho/gamma;
 
+		//printf("Alpha %.3f\n", alpha);
     //  x \gets x + alpha u
+
     vec_axpy(fem.dof, alpha, u, x); 
 
     //  r \gets r - alpha w
     vec_axpy(fem.dof, - alpha, w, r); 
 
+		//print_fem_vect(s,"x", &fem, &mesh_total, x);
+		//print_fem_vect(s,"r", &fem, &mesh_total, r);
     rho_old = rho;
     // \rho \gets <r ,r>
 
@@ -689,7 +738,7 @@ void bspfem() {
   } else {
     DEBUG("CG stopped, maximum iterations (%i) reached. rho = %g\n", k, rho);
   }
-	
+	print_fem_vect(s,"x_solution", &fem, &mesh_total, x);
 	/*
 	 * We now give processor zero the solution vector.
 	 * Note that we probably do not want to do this in the real
@@ -714,14 +763,14 @@ void bspfem() {
 	bsp_pop_reg(x_glob);
 	vecfreed(x_glob);
 	*/
+	if (s == 0)
+		mesh_free(&mesh_total);
   vecfreed(u);
   vecfreed(x);
   vecfreed(r);
   vecfreed(w);
-  vecfreed(b);
   time_total = bsp_time();
-
-	if (use_debug) {
+	if (use_debug && s==0) {
 /*		if (s == 0)
 			printf("mat: %s\np: %d\nn: %d\nb_mode: %d\nk: %d\n", basename(matbuffer), p, mat.n, b_mode, k);
 			*/
