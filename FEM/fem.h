@@ -1,6 +1,7 @@
 #ifndef FEM_H
 #define FEM_H
 
+#define SUPER_DEBUG 0
 /* Functions to create a processor set */
 typedef long long unsigned int proc_set;
 #define SZPROCSET sizeof(proc_set)
@@ -40,6 +41,23 @@ typedef struct {
 	double * rhs;
 } bsp_fem_data;
 
+
+
+void gen_element_matrix(double * res, double *x, double *y, triangle t, int dof, double * rhs);
+matrix_s gen_fem_mat(bsp_fem_data * fem, double *x, double *y, int dof,
+		                 triangle * t, int n_tri, double * rhs);
+
+int proc_count(proc_set set);
+void proc_add(proc_set * set, int proc);
+void proc_remove(proc_set * set, int proc);
+int proc_test(proc_set set, int proc);
+int proc_next(proc_set set, int proc);
+int proc_owner(proc_set set) ;
+
+void fem_data_free(bsp_fem_data * fem);
+bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh);
+
 void bsp_fem_shared_dof_sum(int s, bsp_fem_data * fem, double * v);
 void print_fem_vect(int s, char * name, bsp_fem_data * fem, mesh_dist * mesh_total, double * x);
+double bsp_fem_ip(int p, int s, double * x, double * y,     bsp_fem_data * fem);
 #endif
