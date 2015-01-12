@@ -33,7 +33,7 @@ m2mtx: mesh.o
 	$(CC) $(CFLAGS) -o m2mtx mesh.o m2mtx.c
 
 mtx2dm: mesh.o
-	$(CC) $(CFLAGS) -o m2mtx mesh.o mtx2dm.c
+	$(CC) $(CFLAGS) -o mtx2dm mesh.o mtx2dm.c
 
 clean:
 	rm -f *.o
