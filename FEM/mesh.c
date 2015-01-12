@@ -26,6 +26,14 @@ matrix_s mat_init(int n, int m) {
   return mat;
 }
 
+void mat2mtx( FILE *fp, matrix_s *mat) {
+  fprintf( fp, "%%MatrixMarket matrix coordinate real symmetric");
+  fprintf( fp, "%d %d %d\n", mat->n, mat->m, mat->nz);
+  for( int i = 0; i < mat->nz; i++) {
+    fprintf( fp, "%d %d %g\n", mat->I[i], mat->J[i], mat->val[i]);
+  }
+}
+
 matrix_s * mat_create( int n, int m) {
   matrix_s *mat = malloc( sizeof( matrix_s));
 	*mat = mat_init(n,m);

@@ -22,6 +22,7 @@ typedef struct {
 } mesh_dist;
 
 matrix_s mat_init(int n, int m);
+void mat2mtx( FILE *fp, matrix_s *mat);
 int mat_append( matrix_s *mat, int i, int j, double val);
 void mat_free(matrix_s * mat);
 
