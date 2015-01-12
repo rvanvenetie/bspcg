@@ -30,7 +30,7 @@ void mat2mtx( FILE *fp, matrix_s *mat) {
   fprintf( fp, "%%%%MatrixMarket matrix coordinate real symmetric\n");
   fprintf( fp, "%d %d %d\n", mat->n, mat->m, mat->nz);
   for( int i = 0; i < mat->nz; i++) {
-    fprintf( fp, "%d %d %g\n", mat->I[i], mat->J[i], mat->val[i]);
+    fprintf( fp, "%d %d %g\n", mat->I[i]+1, mat->J[i]+1, mat->val[i]);
   }
 }
 
