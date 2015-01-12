@@ -2,8 +2,6 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-fn = sys.argv[1] if len( sys.argv) > 1 else "lshaped.m"
-
 def readmesh( fn):
     fp = open( fn)
 
@@ -36,20 +34,22 @@ def readmesh( fn):
             [t[i][0], t[i][1], t[i][2], p[i]] = fp.readline().split(" ")
         else:
             [t[i][0], t[i][1], t[i][2]] = fp.readline().split(" ")
-            print t[i]
 
     if distributed:
         return (1, nverts, ntris, x, y, b, t, P, p)
     else:
         return (0, nverts, ntris, x, y, b, t, 1, p)
 
-mesh = readmesh( fn)
-print mesh
-distributed = mesh[0]
+if __name__ == "__main__":
+    fn = sys.argv[1] if len( sys.argv) > 1 else "lshaped.m"
+
+    mesh = readmesh( fn)
+    print mesh
+    distributed = mesh[0]
 
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
-ax.set_aspect( 'equal')
-plt.tripcolor( mesh[3], mesh[4], mesh[6], 'go-', facecolors=mesh[8])
-plt.show()
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_aspect( 'equal')
+    plt.tripcolor( mesh[3], mesh[4], mesh[6], 'go-', facecolors=mesh[8])
+    plt.show()

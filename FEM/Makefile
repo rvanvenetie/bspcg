@@ -2,7 +2,7 @@ UNAME := $(shell whoami)
 WARNING_FLAGS=-Wall -Wextra -Werror-implicit-function-declaration -Wshadow -Wstrict-prototypes -pedantic
 CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
 IDIR = ../libs
-LFLAGS=  -pthread -lm  #-lrt
+LFLAGS=  -lpthread -lm  #-lrt
 
 ifeq ($(UNAME),bissstud)
 	CC = mpiicc
@@ -18,7 +18,7 @@ OBJ= mesh.o fem.o $(IDIR)/bspedupack.o $(IDIR)/io.o $(IDIR)/bspmv.o $(IDIR)/bspi
 %.o: %.c
 	$(CC) -I $(IDIR) -c $(CFLAGS) $<
 
-all: bsp fem
+all: bsp fem m2mtx mtx2dm
 
 fem: $(OBJ)
 	$(CC) $(CFLAGS) -o fem $(OBJ) $(LFLAGS)

@@ -3,6 +3,8 @@
 #include <string.h>
 #include "mesh.h"
 
+#define REMOVE_BOUNDARIES 0
+
 /**
  * Workflow:
  *  1. Create some mesh, load it into the struct
@@ -117,8 +119,8 @@ mesh_dist readfrommeshfile( FILE *fp) {
 
 int write2mtx( FILE *fp, mesh_dist *mesh, matrix_s *hypergraph) {
   fprintf( fp, "%%%%MatrixMarket weightedmatrix coordinate pattern general\n");
-  int nhypernets = mesh->n_vert;
-  int nhyperverts = mesh->n_tri;
+  int nhypernets = hypergraph->m;
+  int nhyperverts = hypergraph->n;
   fprintf( fp, "%d %d %d %d\n", nhypernets, nhyperverts, hypergraph->nz, 3);
 
   for( int i = 0; i < hypergraph->nz; i++) {
@@ -130,7 +132,10 @@ int write2mtx( FILE *fp, mesh_dist *mesh, matrix_s *hypergraph) {
   }
 
   for( int i = 0; i < nhypernets; i++) {
-    fprintf( fp, "%d\n", 1-(int)mesh->b[i]); //can sigma(e) be zero as well?
+    if( REMOVE_BOUNDARIES)
+      fprintf( fp, "%d\n", 1);
+    else
+      fprintf( fp, "%d\n", 1-(int)mesh->b[i]); //can sigma(e) be zero as well?
   }
 
   return 0;
@@ -152,14 +157,18 @@ int readfromvfile( FILE *fp, mesh_dist *mesh) {
 
 matrix_s *create_hypergraph_from_mesh( mesh_dist *mesh) {
   matrix_s *hypergraph = mat_create( mesh->n_tri, mesh->n_vert);
+  int nonbtri = 0;
   for( int i = 0; i < mesh->n_vert; i++) {
+    if( REMOVE_BOUNDARIES && mesh->b[i]) continue;
     for( int j = 0; j < mesh->n_tri; j++) {
       for( int k = 0; k < 3; k++) {
         if( mesh->t[j][k] == i)
-          mat_append( hypergraph, i, j, 1);
+          mat_append( hypergraph, nonbtri, j, 1);
       }
     }
+    nonbtri++;
   }
+  hypergraph->m = nonbtri;
 
   return hypergraph;
 }

@@ -1,10 +1,12 @@
 import numpy as np
+import sys
 from matplotlib import cm
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection,Line3DCollection
 import cProfile
+import plottri
 
 
 '''
@@ -44,8 +46,8 @@ def AssembleA(N,T,G):
 		BI = np.linalg.inv(B) #Inverse of B (TODO hard code inverse?)
 		#
 		Ak = 0.5 * abs(np.linalg.det(B)) * EA1 * BI * BI.T * EA2 #See theory
-		print Tk
-		print Ak
+		#print Tk
+		#print Ak
 		#D = np.mat(C[:,[2,0,1]] - C[:,[1,2,0]])
 		#Ak = D.T * D / (2 * abs(np.linalg.det(B)))
 
@@ -81,14 +83,14 @@ def LinFEM(N,T,G,f,g = 1):
 
 	#Finally solve for uh!
 	sol = np.linalg.solve(Ag + Mg,Mf*F)
-	print Ag
-	print Mf*F
-	print sol
-	print "HOERENZOON"
+	#print Ag
+	#print Mf*F
+	#print sol
+	#print "HOERENZOON"
 	uh = np.zeros(n) #Values of the solution at vertices
 	uh[GInd] = sol
 	
-	return uh, A, M
+	return uh, sol, A, M
 	
 	
 	
@@ -192,7 +194,7 @@ def Voorbeeld():
 	#plt.yscale('log')
 	plt.plot(normsa)
 	plt.plot(norms2)
-	print normsa.shape
+	#print normsa.shape
 	plt.legend([r"$||\Pi u - u_V^\Pi||_A$",r"$||\Pi u - u_V^\Pi ||_2$"])
 	plt.xticks(range(j))
 	ax.set_xticklabels(range(1,j+1))
@@ -201,60 +203,17 @@ def Voorbeeld():
 #plt.rc('text', usetex=True)
 #plt.rc('font', family='serif')
 #Voorbeeld()
-
-N = np.array([[0,0],
-		          [2,0],
-							[0,2],
-							[2,2],
-							[1,1]])
-T = np.array([[0,1,4],
-		          [0,2,4],
-							[1,3,4],
-							[2,3,4]])
-G = np.array([1,1,1,1,0])
-
-
-N = np.array([[0.000000, 0.000000],
-		[0.000000, 1.000000]          ,
-		[-0.951060, 0.309020]         ,
-		[-0.587790, -0.809020]        ,
-		[0.587990, -0.809020]         ,
-		[0.951060, 0.309020]          ,
-		[-0.475530, 0.654510]         ,
-		[0.000000, 0.500000]          ,
-		[-0.475530, 0.154510]         ,
-		[-0.769425, -0.250000]        ,
-		[-0.293895, -0.404510]        ,
-		[0.000100, -0.809020]         ,
-		[0.293995, -0.404510]         ,
-		[0.769525, -0.250000]         ,
-		[0.475530, 0.154510]          ,
-		[0.475530, 0.654510]])
-T = np.array([[7, 6, 0],
-		[7, 1, 6]          ,
-		[8, 6, 2]          ,
-		[8, 0, 6]          ,
-		[8, 9, 0]          ,
-		[8, 2, 9]          ,
-		[10, 9, 3]         ,
-		[10, 0, 9]         ,
-		[10, 11, 0]        ,
-		[10, 3, 11]        ,
-		[12, 11, 4]        ,
-		[12, 0, 11]        ,
-		[12, 13, 0]        ,
-		[12, 4, 13]        ,
-		[14, 13, 5]        ,
-		[14, 0, 13]        ,
-		[14, 15, 0]        ,
-		[14, 5, 15]        ,
-		[7, 15, 1]         ,
-		[7, 0, 15]])
-G = np.array([0,1,1,1,1,1,1,0,0,1,0,1,0,1,0,1])
+fn = sys.argv[1] if len( sys.argv) > 1 else "lshaped.m"
+(distributed, nverts, ntris, x, y, b, t, P, p) = plottri.readmesh( fn)
+N = np.array([x, y]).T
+T = t.astype('int')
+G = b.astype('int')
 	
 f = lambda pt: 1
 g = 0
-uh, A, M = LinFEM(N,T,G,f,g)
+uh, sol, A, M = LinFEM(N,T,G,f,g)
+for i in range( len( sol)):
+    print "%.5f" % sol[i]
 fig = plt.figure()
 ax = fig.add_subplot(2,1,1)
 ax.triplot(N[:,0],N[:,1],T)
@@ -263,21 +222,3 @@ ax = fig.add_subplot(2,1,2, projection='3d')
 ax.plot_trisurf(N[:,0],N[:,1],uh,		 cmap=cm.RdBu)
 ax.set_title('$u_h$')
 plt.show()
-'''PENTAGON'''
-
-'''
-N = np.array([[0,0],
-							[0,1],
-							[-0.95106,0.30902],
-							[-0.58779,-0.80902],
-							[0.58799,-0.80902],
-							[0.95106,0.30902]])
-
-T = np.array([[0,1,2],
-							[0,2,3],
-							[0,3,4],
-							[0,4,5],
-							[0,5,1]])
-G = np.array([0,1,1,1,1,1])
-'''
-
