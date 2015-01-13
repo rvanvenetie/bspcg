@@ -76,7 +76,8 @@ void bspcg() {
 	bsp_pop_reg(&eps);
 	bsp_pop_reg(&use_debug);
 	bsp_pop_reg(&use_time);
-
+	if (s != 0 && b_mode == B_LOAD)
+		vecvalbuffer = (char * ) 1;
   /* Read matrix/vector distribution&values from file */
   mat = load_symm_distributed_matrix_from_file( matbuffer, p, s);
 	dis = load_vector_distribution_from_file( vecdisbuffer, vecvalbuffer, p, s, &b);
