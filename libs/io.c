@@ -347,16 +347,13 @@ By convention, the column index of the -1'th nonzero is 0.
   i= 0;
   iglob_last= -1;
   for(k=0; k<nz; k++){
-    if (k==0)
-      inck= ja[k];
-    else
-      inck= ja[k] - ja[k-1];
+    if (k==0) inck= ja[k];
+    else inck= ja[k] - ja[k-1];
     iglob= ia[k]; 
     if(iglob!=iglob_last){
       rowindex[i]= iglob;
       i++;
-      if(k>0)
-        inck += ncols;
+      if(k>0) inck += ncols;
     } 
     ia[k]= inck; /* ia is used to store inc */
     iglob_last= iglob;

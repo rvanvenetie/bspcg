@@ -12,3 +12,5 @@ typedef struct {
 
 distributed_matrix load_symm_distributed_matrix_from_file( const char *filename, const int p, const int s);
 vector_distribution load_vector_distribution_from_file( const char *disfile, const char *valfile, const int p, const int s, double **pval);
+
+void triple2icrs(int n, int nz, int *ia,  int *ja, double *a, int *pnrows, int *pncols, int **prowindex, int **pcolindex);
