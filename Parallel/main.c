@@ -310,7 +310,7 @@ int main(int argc, char *argv[]) {
 	matbuffer   =  malloc(BUFERSTRSIZE);
 	vecdisbuffer=  malloc(BUFERSTRSIZE);
 	snprintf( matbuffer,    1024, "%s-P%d", argv[1], P);
-	snprintf( vecdisbuffer, 1024, "%s-u%d", argv[1], P);
+	snprintf( vecdisbuffer, 1024, "%s-v%d", argv[1], P);
 	if (b_mode == B_LOAD) {
 		vecvalbuffer=  malloc(BUFERSTRSIZE);
 		snprintf( vecvalbuffer, 1024, "%s-b"  , argv[1]);

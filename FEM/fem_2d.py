@@ -84,7 +84,7 @@ def LinFEM(N,T,G,f,g = 1):
 	#Finally solve for uh!
 	sol = np.linalg.solve(Ag + Mg,Mf*F)
 	#print Ag
-	#print Mf*F
+	print Mf*F
 	#print sol
 	#print "HOERENZOON"
 	uh = np.zeros(n) #Values of the solution at vertices
