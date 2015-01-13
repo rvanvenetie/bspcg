@@ -18,9 +18,9 @@
 
 /* These variables may be acces by any processor */
 int kmax		 = 10000;
-int b_mode	 = B_ONES;
+int b_mode	 = B_LOAD;
 double eps	 = 1E-8;
-int use_debug= 1;
+int use_debug= 0;
 int use_time = 1;
 /* These variables may only be acces by s = 0 */
 int P        = 1;
@@ -226,6 +226,10 @@ void bspcg() {
 	}
 
 	bsp_sync();
+	if (s == 0 && use_debug) {
+		for (int i = 0; i < dis.n; i++)
+			fprintf(stderr,"%.5f\n", x_glob[i]);
+	}
 	bsp_pop_reg(x_glob);
 	vecfreed(x_glob);
 
@@ -258,10 +262,9 @@ void bspcg() {
 		double time_it_local = time_iter - (time_mv + time_ip);
 		double density = mat.nzA / ((double) mat.n * mat.n);
 		if (use_debug)
-			printf("mat_name, p,      mat_n,  mat_nzA, density, k, time_init, time_iter, time_glob,time_total,  time_it_local, time_mv, time_ip\n");
-		//mat_name, p,      mat_n,  mat_nzA, density, k,  time_init, time_iter, time_glob, time_total time_it_local, time_mv, time_ip
-		printf("%s" "\t%d" "\t%d" "\t%d"    "\t%6f"	"\t%d"	"\t%6f"		 "\t%6f" 		"\t%6f"	 "\t%6f"		"\t%6f"					"\t%6f"   "\t%6f\n",
-				basename(matbuffer), p, mat.n, mat.nzA,density,k,time_init,time_iter,time_glob,time_total, time_it_local,time_mv,time_ip);
+			printf("name\tp\tmat_n\tmat_nzA\tdensity\tk\ttime_total\ttime_init\ttime_iter\ttime_glob\ttime_mv\ttime_ip\ttime_it_local\n");
+		printf("%s\t%d\t%d\t%d\t%.6f\t%d\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\n",
+				basename(matbuffer), p, mat.n, mat.nzA, density,k,time_total,time_init,time_iter,time_glob, time_mv,time_ip, time_it_local);
   }
 
   bsp_end();

@@ -63,8 +63,8 @@ int proc_owner(proc_set set) ;
 void fem_data_free(bsp_fem_data * fem);
 bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh);
 
+double * bsp_fem_ass_vect(int s, bsp_fem_data * fem, mesh_dist * mesh_total, double * x);
 void bsp_fem_mv(int s,mesh_dist * mesh_total,  bsp_fem_data * fem, double * v, double * u);
 void bsp_fem_shared_dof_sum(int s, bsp_fem_data * fem, double * v);
-void print_fem_vect(int s, char * name, bsp_fem_data * fem, mesh_dist * mesh_total, double * x);
 double bsp_fem_ip(int p, int s, double * x, double * y,     bsp_fem_data * fem);
 #endif
