@@ -22,7 +22,7 @@ void  hack_fem_mat() {
 	mat2mtx(output_mat, &hack.mat);
 	//Output RHS in corresponding file format
 	fprintf(output_rhs, "%d\n", hack.dof);
-	int cntr = 0;
+	int cntr = 1;
 	for (int i = 0; i < hack.dof; i++)
 		fprintf(output_rhs, "%d %lf\n", cntr++, hack.rhs[i]);
 }

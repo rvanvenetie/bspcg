@@ -13,7 +13,7 @@
 /* These variables may be acces by any processor */
 int kmax		 = 10000;
 double eps	 = 1E-8;
-int use_debug= 1;
+int use_debug= 0;
 int use_time = 1;
 /* These variables may only be acces by s = 0 */
 int P        = 1;
@@ -50,29 +50,10 @@ void print_mesh_dist(mesh_dist mesh) {
 }
 
 void print_fem_vect(int s, char * name, bsp_fem_data * fem, mesh_dist * mesh_total, double * x) {
-	double * x_glob = (double * ) 1337; //Hacky solution, otherwise BSP will struggle
-	if (s == 0)
-		x_glob = vecallocd(fem->n_vert_total);
-
-	bsp_push_reg(x_glob, fem->n_vert_total*SZDBL);
-	bsp_sync();
-
-	for (int i = 0; i < fem->n_shared; i++) //Only push shared vertex if we own it
-		if (s == proc_owner(fem->p_shared[i]))  
-			bsp_put(0, &x[i], x_glob, fem->i_glob[i] * SZDBL, SZDBL);
-		
-	for (int i = fem->n_shared; i < fem->dof; i++) 
-		bsp_put(0, &x[i], x_glob, fem->i_glob[i] * SZDBL, SZDBL);
-	
-	bsp_sync();
-	bsp_pop_reg(x_glob);
+  double *	x_glob = bsp_fem_ass_vect(s, fem, mesh_total, x);
 	if (s == 0) { 
-		int dof_cntr = 0;
-		for (int i = 0; i < mesh_total->n_vert; i++)
-			if (!mesh_total->b[i])
-				x_glob[dof_cntr++] = x_glob[i];
 		fprintf(stdout,"FEM Vector %s:\n[", name);
-		for (int i = 0; i < dof_cntr; i++)
+		for (int i = 0; i < mesh_total->n_dof; i++)
 			fprintf(stderr,"%.5f\n", x_glob[i]);
 		fprintf(stdout, "]\n");
 		//printf("]\n");
@@ -280,8 +261,6 @@ void bspfem() {
   } else {
     DEBUG("CG stopped, maximum iterations (%i) reached. rho = %g\n", k, rho);
   }
-	//if (use_debug)
-		//print_fem_vect(s,"x_solution", &fem, &mesh_total, x);
 	/*
 	 * We now give processor zero the solution vector.
 	 * Note that we probably do not want to do this in the real
@@ -290,24 +269,14 @@ void bspfem() {
 
 	 * We have this step mainly for timing
 	 */
-	/*
-	double * x_glob;
-	x_glob = vecallocd(dis.n);
-	bsp_push_reg(x_glob, dis.n*SZDBL);
-	bsp_sync();
-
-	for (int i = 0; i < fem.dof; i++)
-	{
-		int index_glob = dis.vindex[i];
-		bsp_put(0, &x[i], x_glob, index_glob * SZDBL, SZDBL);
+	double * x_glob = bsp_fem_ass_vect(s, &fem, &mesh_total, x);
+	if (use_debug)
+		print_fem_vect(s,"x_solution", &fem, &mesh_total, x);
+	if (s == 0) {
+		free(x_glob);
+		mesh_free(&mesh_total);
 	}
 
-	bsp_sync();
-	bsp_pop_reg(x_glob);
-	vecfreed(x_glob);
-	*/
-	if (s == 0)
-		mesh_free(&mesh_total);
   vecfreed(u);
   vecfreed(x);
   vecfreed(r);
@@ -330,10 +299,9 @@ void bspfem() {
 		double time_glob = time_total - time_done;
 		double time_it_local = time_iter - (time_mv + time_ip);
 		if (use_debug)
-			printf("mat_name, p,      n_vert_total,  n_dof_total,k, time_init, time_iter, time_glob,time_total,  time_it_local, time_mv, time_ip\n");
-		//mat_name, p,      mat_n,  mat_nzA, density, k,  time_init, time_iter, time_glob, time_total time_it_local, time_mv, time_ip
-		printf("%s"       "\t%d"     "\t%d"        "\t%d"   "\t%d" "\t%6f"	"\t%6f"	"\t%6f"		 "\t%6f" 		"\t%6f"	 "\t%6f"		"\t%6f\n",
-				basename(meshbuffer), p, mesh_total.n_vert, mesh_total.n_dof,k,time_init,time_iter,time_glob,time_total, time_it_local,time_mv,time_ip);
+			printf("name\tp\tn_vert_total\tn_dof_total\tk\ttime_total\ttime_init\ttime_iter\ttime_glob\ttime_mv\ttime_ip\ttime_it_local\n");
+		printf("%s\t%d\t%d\t%d\t%d\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\n",
+				basename(meshbuffer), p, mesh_total.n_vert, mesh_total.n_dof,k,time_total,time_init,time_iter,time_glob, time_mv,time_ip, time_it_local);
 		
   }
 	fem_data_free(&fem);
