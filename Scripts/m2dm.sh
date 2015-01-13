@@ -23,5 +23,5 @@ $m2mtx $meshname.m > $meshname.mtx_tmp
 #Generate distributed hypergraph
 $mond $meshname.mtx_tmp $p 0.03
 #Generate distributed mesh
-$mtx2dm $meshname.m $p > $meshname.m-P$p
+$mtx2dm $meshname.m $p $meshname.mtx_tmp-v$p > $meshname.m-P$p
 rm *.mtx_tmp*
