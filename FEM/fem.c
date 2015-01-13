@@ -492,15 +492,13 @@ double * bsp_fem_ass_vect(int s, bsp_fem_data * fem, mesh_dist * mesh_total, dou
 	double * x_glob = (double * ) 1337; //Hacky solution, otherwise BSP will struggle
 	if (s == 0)
 		x_glob = vecallocd(fem->n_vert_total);
-
 	bsp_push_reg(x_glob, fem->n_vert_total*SZDBL);
 	bsp_sync();
 
 	for (int i = 0; i < fem->n_shared; i++) //Only push shared vertex if we own it
-		if (s == proc_owner(fem->p_shared[i]))  
+		if (s == proc_owner(fem->p_shared[i]))   
 			bsp_put(0, &x[i], x_glob, fem->i_glob[i] * SZDBL, SZDBL);
-
-	for (int i = fem->n_shared; i < fem->dof; i++) 
+	for (int i = fem->n_shared; i < fem->dof; i++)  
 		bsp_put(0, &x[i], x_glob, fem->i_glob[i] * SZDBL, SZDBL);
 
 	bsp_sync();
@@ -512,6 +510,8 @@ double * bsp_fem_ass_vect(int s, bsp_fem_data * fem, mesh_dist * mesh_total, dou
 				x_glob[dof_cntr++] = x_glob[i];
 	} else
 		x_glob = NULL;
+
+	bsp_sync();
 	return x_glob;
 }
 
