@@ -2,7 +2,7 @@ UNAME := $(shell whoami)
 WARNING_FLAGS=-Wall -Wextra -Werror-implicit-function-declaration -Wshadow -Wstrict-prototypes -pedantic
 CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
 IDIR = ../libs
-LFLAGS=  -pthread -lm  #-lrt
+LFLAGS=  -lpthread -lm  #-lrt
 
 ifeq ($(UNAME),bissstud)
 	CC = mpiicc
@@ -24,6 +24,9 @@ all: bsp fem m2mtx mtx2dm exportmat
 
 fem: $(OBJ_BSP_FEM)
 	$(CC) $(CFLAGS) -o bspfem $(OBJ_BSP_FEM) $(LFLAGS)
+
+icrstest: $(OBJ) icrstest.o
+	$(CC) $(CFLAGS) -o icrstest $(OBJ) icrstest.o $(LFLAGS)
 
 bsp:
 	cd $(IDIR); make all;
