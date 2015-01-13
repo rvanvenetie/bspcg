@@ -357,7 +357,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 		//Push non-shared vertices
 		for (int v = 0; v < mesh->n_vert; v++)
 			if (!mesh->b[v] && proc_count(vert_proc[v]) == 1) { //Non-shared vertex
-				int proc = proc_next(vert_proc[v], -1);
+				int proc = proc_owner(vert_proc[v]);
 				if (SUPER_DEBUG)
 					printf("Processor %d gets own_vertex %d local idx %d\n", proc, v, vert_cntr[proc]);
 				bsp_put(proc, &mesh->x[v],	 result.x, vert_cntr[proc] * SZDBL, SZDBL);

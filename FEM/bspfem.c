@@ -173,7 +173,7 @@ void bspfem() {
 	bsp_pop_reg(&eps);
 	bsp_pop_reg(&use_debug);
 	bsp_pop_reg(&use_time);
-
+	DEBUG("Start loading mesh from file\n");
 	//TODO: Load mesh_from file
 	if (s == 0) {
 		FILE * mesh_buf = fopen(meshbuffer, "r"); //TODO: FILE --> FILENAME
@@ -182,7 +182,9 @@ void bspfem() {
 		if (SUPER_DEBUG) 
 			print_mesh_dist(mesh_total);
 	}
+	DEBUG("Loaded mesh from file\n");
 	fem = bsp_fem_init(s,p, &mesh_total);
+	DEBUG("BSP fem init\n");
 
 	if (use_debug)
 		print_fem_data(s, fem, &mesh_total);
