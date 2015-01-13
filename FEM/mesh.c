@@ -122,6 +122,10 @@ mesh_dist readfrommeshfile( FILE *fp) {
     fscanf( fp, "\n");
   }
 
+	mesh.n_dof = 0;
+	for (int i = 0; i < mesh.n_vert; i++)
+		if (!mesh.b[i])
+			mesh.n_dof++;
   return mesh;
 }
 

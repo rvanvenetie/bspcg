@@ -283,9 +283,11 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 		memset(vert_cntr, 0, sizeof(int) * p);
 		memset(tri_cntr, 0, sizeof(int) * p);
 		//Push triangles
-		for (int i = 0; i < mesh->n_tri; i++) 
+		for (int i = 0; i < mesh->n_tri; i++) {
+			if (SUPER_DEBUG)
+				fprintf(stderr, "Processor %d gets triangle (%d,%d,%d) at local idx %d\n", mesh->p[i], mesh->t[i][0], mesh->t[i][1], mesh->t[i][2], tri_cntr[mesh->p[i]]);
 			bsp_put(mesh->p[i], &mesh->t[i], result.t, (tri_cntr[mesh->p[i]]++)*SZTRI, SZTRI);
-		
+		}
 		//First push shared vertices (not bound)
 		for (int v = 0; v < mesh->n_vert; v++)
 			if (!mesh->b[v] && proc_count(vert_proc[v]) > 1) { //Shared vertex
@@ -421,8 +423,8 @@ void bsp_fem_mv(int s,mesh_dist * mesh_total,  bsp_fem_data * fem, double * v, d
 	bsp_fem_shared_dof_sum(s, fem, v); //Sum the shared vertices
 
 	if (SUPER_DEBUG) {
-	  print_fem_vect(s,"u in v=Au", fem, mesh_total, u);
-	  print_fem_vect(s,"v in v=Au", fem, mesh_total, v);
+	  //print_fem_vect(s,"u in v=Au", fem, mesh_total, u);
+	  //print_fem_vect(s,"v in v=Au", fem, mesh_total, v);
 	}
 }
 

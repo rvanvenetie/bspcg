@@ -13,6 +13,7 @@ typedef struct {
   double *x, *y;//Coordinates
 	int * b;      //Lies on boundary of domain?
   int n_vert;   //Amount of vertices
+	int n_dof;    //Amount of DOF
   
   /* Triangles */
   triangle * t;   //Triangles consist of three vertices

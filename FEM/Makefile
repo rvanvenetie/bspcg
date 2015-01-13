@@ -4,6 +4,10 @@ CFLAGS= -g   -std=c99 -DMCBSP_COMPATIBILITY_MODE
 IDIR = ../libs
 LFLAGS=  -lpthread -lm  #-lrt
 
+ifneq ($(UNAME),janner)
+	CFLAGS += -pthread
+endif
+
 ifeq ($(UNAME),bissstud)
 	CC = mpiicc
 	LFLAGS += -lbsponmpi

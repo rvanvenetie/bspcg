@@ -158,8 +158,8 @@ void print_fem_data(int s, bsp_fem_data result, mesh_dist * mesh_total) {
 
 void bspfem() {
   double time_init, time_done, time_total;
-  double time_before_mv, time_mv;
-  double time_before_ip, time_ip;
+  double time_before_mv, time_mv = 0;
+  double time_before_ip, time_ip = 0;
   int p,s; //Defaults for bsp
   //Vectors local
   double *r; //Holds the residual
@@ -280,8 +280,8 @@ void bspfem() {
   } else {
     DEBUG("CG stopped, maximum iterations (%i) reached. rho = %g\n", k, rho);
   }
-	if (use_debug)
-		print_fem_vect(s,"x_solution", &fem, &mesh_total, x);
+	//if (use_debug)
+		//print_fem_vect(s,"x_solution", &fem, &mesh_total, x);
 	/*
 	 * We now give processor zero the solution vector.
 	 * Note that we probably do not want to do this in the real
@@ -326,17 +326,15 @@ void bspfem() {
 							, s, time_init, time_mv, time_ip, time_done, time_total);
 	}
 	if (s == 0 && use_time) {
-		/*
 		double time_iter = time_done - time_init;
 		double time_glob = time_total - time_done;
 		double time_it_local = time_iter - (time_mv + time_ip);
-		double density = mat.nzA / ((double) mat.n * mat.n);
 		if (use_debug)
-			printf("mat_name, p,      mat_n,  mat_nzA, density, k, time_init, time_iter, time_glob,time_total,  time_it_local, time_mv, time_ip\n");
+			printf("mat_name, p,      n_vert_total,  n_dof_total,k, time_init, time_iter, time_glob,time_total,  time_it_local, time_mv, time_ip\n");
 		//mat_name, p,      mat_n,  mat_nzA, density, k,  time_init, time_iter, time_glob, time_total time_it_local, time_mv, time_ip
-		printf("%s" "\t%d" "\t%d" "\t%d"    "\t%6f"	"\t%d"	"\t%6f"		 "\t%6f" 		"\t%6f"	 "\t%6f"		"\t%6f"					"\t%6f"   "\t%6f\n",
-				basename(matbuffer), p, mat.n, mat.nzA,density,k,time_init,time_iter,time_glob,time_total, time_it_local,time_mv,time_ip);
-				*/
+		printf("%s"       "\t%d"     "\t%d"        "\t%d"   "\t%d" "\t%6f"	"\t%6f"	"\t%6f"		 "\t%6f" 		"\t%6f"	 "\t%6f"		"\t%6f\n",
+				basename(meshbuffer), p, mesh_total.n_vert, mesh_total.n_dof,k,time_init,time_iter,time_glob,time_total, time_it_local,time_mv,time_ip);
+		
   }
 	fem_data_free(&fem);
   bsp_end();
