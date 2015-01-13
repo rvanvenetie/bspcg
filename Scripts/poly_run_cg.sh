@@ -1,4 +1,7 @@
 #!/bin/bash
+#SBATCH -p short
+#SBATCH -n 64
+#SBATCH -t 30:00
 source options.sh
 cwd=$(pwd)
 cg="$cwd/../Parallel/main"
@@ -8,7 +11,10 @@ do
   for p in "${parr[@]}"
   do
     polyname="$(basename "$poly" .m)"
-    matname="$meshdir/$polyname/$polyname.m"
-    $cg $matname $p
+    matname="$meshdir/$polyname/$polyname"
+		if [ -f "$matname.m-P$p" ] && [ -f "$matname.mtx-P$p" ]
+		then
+		  $runcmd $cg $matname.mtx $p
+		fi
   done
 done
