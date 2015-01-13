@@ -7,6 +7,12 @@ typedef long long unsigned int proc_set;
 #define SZPROCSET sizeof(proc_set)
 #define SZTRI     sizeof(triangle)
 
+
+typedef struct {
+  int n, nz, *inc, pnr, pnc, *pri, *pci;
+  double *val;
+} matrix_icrs;
+
 /* Data structure for the data of each processor */
 typedef struct {
 	/*
@@ -36,13 +42,13 @@ typedef struct {
 
   /* FEM matrix for this processor */
   matrix_s mat;
+  matrix_icrs imat;
 
 	/* RHS of the equation */
 	double * rhs;
 } bsp_fem_data;
 
-
-
+int icrs_remove_duplicates( matrix_icrs mat);
 void gen_element_matrix(double * res, double *x, double *y, triangle t, int dof, double * rhs);
 matrix_s gen_fem_mat(bsp_fem_data * fem, double *x, double *y, int dof,
 		                 triangle * t, int n_tri, double * rhs);

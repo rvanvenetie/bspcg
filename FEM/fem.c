@@ -13,7 +13,6 @@
 #include "bspedupack.h"
 #include "fem.h"
 
-
 /*
  *
  * We have two options: Domain distribution or Matrix distrubtion.
@@ -105,6 +104,52 @@ matrix_s gen_fem_mat(bsp_fem_data * fem, double *x, double *y, int dof,
 	return result;
 }
 
+int icrs_remove_duplicates( matrix_icrs mat) {
+  int n = mat.n, nz = mat.nz, *inc = mat.inc;
+  double *a = mat.val;
+  int pnrows = mat.pnc, pncols = mat.pnc, *prowindex = mat.pri, *pcolindex = mat.pci;
+  int nnz = nz;
+  int j = 0;
+  for( int i = 1; i < nz; i++) {
+    if (inc[i] == 0) {
+      a[j] += a[i];
+      nnz--;
+    } else {
+      a[++j] = a[i];
+      inc[j] = inc[i];
+    }
+  }
+  inc[nnz] = inc[nz];
+  a[nnz] = 0;
+  return nnz;
+}
+
+matrix_icrs coo2icrs( matrix_s mat, int remove_duplicates) {
+  matrix_icrs imat;
+  int *imatinc = vecalloci( mat.nz);
+  int *imatja = vecalloci( mat.nz);
+  double *imatval = vecallocd( mat.nz);
+  imat.inc = imatinc;
+  imat.val = imatval;
+
+  for( int i = 0; i < mat.nz; i++) {
+    imat.inc[i] = mat.I[i];
+    imatja[i] = mat.J[i];
+    imat.val[i] = mat.val[i];
+  }
+
+  imat.n = mat.n;
+  imat.nz = mat.nz;
+
+  triple2icrs( mat.n, mat.nz, imat.inc, imatja, imat.val, &imat.pnr, &imat.pnc, &imat.pri, &imat.pci);
+
+  vecfreei( imatja);
+
+  if( remove_duplicates)
+    mat.nz = icrs_remove_duplicates( imat);
+
+  return imat;
+}
 
 
 /* Count the amount of processors in a set */
@@ -366,6 +411,9 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 
 	result.mat = gen_fem_mat(&result, result.x, result.y, result.dof,
 			                     result.t, result.n_tri, result.rhs);
+  
+  //coo to icrs
+  result.imat = coo2icrs( result.mat, 1);
 
 	bsp_fem_shared_dof_sum(s, &result, result.rhs);
 	/* We are DONE! */
@@ -373,7 +421,7 @@ bsp_fem_data bsp_fem_init(int s, int p, mesh_dist * mesh) {
 }
 
 //Symmetric sparse matrix vector multiplication v = Au
-void ssmv(double * v, matrix_s * mat,  double * u) {
+void ssmv_coo(double * v, matrix_s * mat,  double * u) {
 	for (int k = 0; k < mat->n; k++)
 		v[k] = 0;
 
@@ -383,6 +431,25 @@ void ssmv(double * v, matrix_s * mat,  double * u) {
 		v[i] += mat->val[k] * u[j];
 		if (i != j)
 			v[j] += mat->val[k] * u[i];
+	}
+}
+
+void ssmv_icrs( double *v, matrix_icrs *mat, double *u) {
+	for (int k = 0; k < mat->n; k++)
+		v[k] = 0;
+  int j = mat->inc[0];
+  int k = 0;
+
+  for( int i = 0; i < mat->n; i++) {
+    while( j < mat->n) {
+      v[i] += mat->val[k]*u[j];
+      if( i != j)
+        v[j] += mat->val[k]*u[i];
+      k++;
+      j += mat->inc[k];
+    }
+
+    j -= mat->n;
 	}
 }
 
@@ -419,7 +486,7 @@ void bsp_fem_shared_dof_sum(int s, bsp_fem_data * fem, double * v) {
 }
 //Calculate v = Au using our FEM-stuff
 void bsp_fem_mv(int s,mesh_dist * mesh_total,  bsp_fem_data * fem, double * v, double * u) {
-	ssmv(v, &fem->mat, u);
+  ssmv_icrs(v, &fem->imat, u);
 	bsp_fem_shared_dof_sum(s, fem, v); //Sum the shared vertices
 
 	if (SUPER_DEBUG) {
