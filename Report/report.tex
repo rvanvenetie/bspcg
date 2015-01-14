@@ -362,7 +362,14 @@ Given a vertex $x_i$, there are two possibilities:
   \label{fig:procset}
 \end{figure}
 
-Here we see the second advantage of this approach. By distributing triangles, we can balance computation and communication cost of a matrix-vector multiplication. We chose to use Mondriaan, using \cite{bissmondriaan,biss2012}.
+Here we see the second advantage of this approach. By distributing triangles, we can balance computation and communication cost of a matrix-vector multiplication. We chose to use Mondriaan, using \cite{bissmondriaan,biss2012}. First, we create some triangulation (e.g., using \cite{TODOJAN}) and save this to disk for later retrieval. We then transform this into a \emph{hypergraph} $H = (V,E)$ -- a generalization of a graph in which any number of hypervertices can be connected by hyperedges or \emph{nets}. This is done as follows:
+\begin{itemize}
+  \item[-] Every triangle $T_n$ in our triangulation is identified with a hypervertex $v_n \in V$;
+  \item[-] Every vertex $x_i$ connecting triangles $\{T_{n_0}, \ldots, T_{n_k}\}$ is identified with a net $e_i \in E$ connecting hypervertices $\{v_{n_0}, \ldots, v_{n_k}\}$.
+  \item[-] Every hypervertex $v_n \in V$ is given a \emph{vertex weight}, measuring the computational cost corresponding with triangle $T_n$. In our case, one needs to compute the same quantities for every triangle.\footnote{In more advanced Finite Element methods where the polynomial degree is different for each triangle, this would scale with the polynomial degree.} We set this to 1;
+  \item[-] Every net $e_i\in V$ is given a \emph{net weight}. Mondriaan does not implement this, but to be future-proof, we set this to 1 for all vertices $v_i$ not on the boundary and 0 for boundary vertices. This reflects the fact that boundary vertices have no degree of freedom attached to it.
+\end{itemize}
+Mondriaan then aims to balance communication and computation cost between processors by creating a distribution of the hypervertices. It requires setting the amount of processors $p$ and a load imbalance factor $\epsilon$ which we set to $0.1$.
 
 \section{Future work}
 \subsection{Preconditioned CG}
@@ -420,6 +427,7 @@ The beauty of this preconditioner is the fact that its sparsity pattern is just 
 
 A more advanced preconditioner that is often used in the symmetric positive definite case is Incomplete Cholesky.  The Cholesky factorization of a positive definite matrix $A$ is $A = LL^*$ with $L$ a lower triangular matrix. An incomplete Cholesky factorization is any sparse lower triangular $K$ that is in some sense close to $L$. One such $K$ can be found by finding the exact Cholesky decomposition, except that any entry is set to zero if the corresponding entry in $A$ is also zero. \cite[\S11.5.8]{golub}
 \subsection{Adaptive FEM}
+\subsection{PaToH ipv Mondriaan}
 
 
 \bibliographystyle{alpha}
