@@ -63,65 +63,6 @@ with known $A$ and $b$.
 
 In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method. Systems like this are sparse in the sense that a lot of the elements will be zero. This makes it possible to skip parts of the matrix-vector products one encounters.
 
-To test our implementation, it is useful to have a supply of matrices ready. The University of Florida has a huge collection of sparse matrices. \cite{uniflo} We chose to read these matrices in Matrix Market file format, allowing us to use various tools in existence. \cite{mondriaan,matmar}
-
-\section{Finite Element Method}
-Given the boundary value problem, 
-\begin{equation}
-  \begin{cases} - \Delta u = 1 & \Omega \\ u = 0 & \partial \Omega \end{cases}
-  \label{eqn:problem}
-\end{equation}
-and some partition into simplices, FEM will find the continuous solution, piecewise polynomial (wrt.~this partition) with smallest $H^1$-norm error. ofzo
-
-If we apply this to our 2D case, we have a polygonal domain $\Omega$ and a set of elements $\{\triangle_k\}_{k=1}^K$, $\triangle_k \subset \Omega$ with $\cup_{k=1}^K \triangle_k = \Omega$ and $\triangle_k \cap \triangle_j$ for $k \not= j$ is either empty, a common vertex or a common edge (hoe heet dit ook alweer? regularity condition ofzo?).
-
-We create one reference element $\hat \triangle$ spanned by vertices $(0,0)$, $(1, 0)$, $(0, 1)$ on which we have a polynomial basis of some degree -- say $\bar p$. The amount of basis functions in this basis must be $p = (\bar p + 2)(\bar p + 1)/2$. So we have a basis $\hat \Phi = \{ \hat \phi_i \}_{i=1}^p$.
-
-We are now able to create an affine function $T_k: \triangle_k \to \hat \triangle$ from some element in the partition to this reference element. Hence we automatically have a polynomial basis on $\triangle_k$, namely $\Phi^k := \{ \phi^k_i \}_{i=1}^p$ with $\phi^k_i := \hat \phi_i \circ T_k$.
-
-We can in fact create a global basis $\mathbf \Phi$ by gluing together the correct functions (TODO dit is lastig). Each basis function of this basis is a piecewise polynoimal subject to the partition, and is necessarily zero on $\partial \Omega$.
-
-\subsection{Weak formulation}
-If $u$ solves \eqref{eqn:problem}, then
-\[
-  -\Delta u = 1 \implies - v \Delta u = v \forall v \in H^1_0(\Omega) \implies \int_\Omega - v \Delta u = \int_\Delta v
-\]
-and using Green's first identity
-\[
-  \int_\Omega - v \Delta u = \int_\Omega \nabla v \cdot \nabla u - \oint_{\partial \Omega} v( \nabla u \cdot n)
-\]
-where the last term must equal zero as $u = 0$ on $\partial \Omega$. We therefore end up at the weak formulation:
-\[
-  u\text{ solves } \eqref{eqn:problem} \implies \int_{\Omega} \nabla v \cdot \nabla u = \int_\Omega v \forall v \in H^1_0(\Omega).
-\]
-
-The idea is that we will find functions $u_{FE}$ that exhibit this property and ``hope'' (TODO vinden dat dit klopt) that $u_{FE}$ ``almost'' solves \eqref{eqn:problem}.
-
-\section{Linear polynomials on the triangle}
-If we take $\bar p=1$, we are discussing linear polynomials on the triangle. One way to create a basis for this space is to use the \emph{nodal basis}, where we create basis functions that are equal $1$ on one vertex of the triangle and $0$ on the others. The nodal basis on the reference element becomes
-\[
-  \hat \phi_1 = 1-y-x, \quad \hat \phi_2 = y, \quad \hat \phi_3 = x.
-\]
-
-If we look at this globally, we have a \emph{nodal basis} for the whole partition, namely two-dimensional ``hat'' functions $\phi_i$ which are zero on every vertex but a single one -- say $v_i$. The vertices on the boundary of the domain cannot have basis functions associated with them, as the resulting solution $u_{FE} = c^\top \mathbf \Phi = \sum c_i \phi_i$ must be zero on this boundary.
-
-If we fill in $u_{FE}$ in this weak formulation and set $v = \phi_j$, we get
-\[
-  \int_\Omega \nabla \phi_j \cdot \nabla \left (\sum c_i \phi_i\right) = \int_\Omega \phi_j \implies \sum c_i \int_\Omega \nabla \phi_j \cdot \nabla \phi_i = \int_\Omega \phi_j \forall j
-\]
-or
-\[
-  Ac = b, \quad a_{ij} = \int_\Omega \nabla \phi_j \cdot \nabla \phi_i, \quad b_i = \int_\Omega \phi_j.
-\]
-In other words, finding this best solution $u_{FE} = c^\top \mathbf \Phi$ amounts to solving a linear system where the matrix $A$ is real and symmetric (as inner products are commutative). This is where the Conjugate gradient method comes into play.
-
-Hier moet nog aan toegevoegd worden:
-\begin{itemize}
-  \item stiffness matrix is eigenlijk som van kleinere stiffness matrices
-  \item deze grote stiffness matrix kan je maken/opslaan door op de goede plek shit in te voegen.
-\end{itemize}
-
-
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS \cite{blas} routines.
 
@@ -183,60 +124,6 @@ Our storage format uses the so-called coordinate scheme; we store tuples $(i, j,
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{Preconditioned CG}
-The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
-\[
-  \frac{\|x - x_k\|_A}{\|x - x_0\|_A} \leq 2 \left( \frac{ \sqrt{\kappa_2(A)}-1}{\sqrt{\kappa_2(A)}+1}\right)^k \leq 2 \exp \left( -\frac{2k}{\sqrt{\kappa_2(A)}}\right) 
-\]
-where $\kappa_2(A)$ is the $2$-condition number of $A$, which for symmetric positive definite matrices equates
-\[
-  \kappa_2(A) = \frac{\lambda_{max}}{\lambda_{min}}.
-\]
-It is therefore of interest to create a condition number that is as low as possible.
-
-A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a smaller condition number than $A$. As the theoretical convergence rate is highly dependent on the condition number, we can improve this using such a preconditioner. Instead of solving $Ax = b$, we will solve $P^{-1}Ax = P^{-1}b$. This preconditioner should satisy:
-\begin{itemize}
-  \item Convergence time should be faster for the preconditioned system. Normally, this means that $P$ is constructed as an ``easily invertible'' approximation to $A$;
-  \item Operations with $P^{-1}$ should be easy to perform;
-  \item $P$ should be (relatively) easy to construct.
-\end{itemize}
-
-TODO uitleggen wat implicit preconditioning precies inhoudt
-
-Algorithm~\ref{alg:pcg} shows CG with implicit preconditioning. \cite[Lect.~10]{sleij}
-\begin{algorithm}
-  \caption{CG with implicit preconditioning \cite[Lect.~10]{sleij}}
-  \label{alg:pcg}
-  \begin{algorithmic}
-    \State $\rho \gets 1$;
-    \While{asdf}
-      \State $c \gets P^{-1} r$; \Comment{Solve $Pc = r$ for c}
-      \State $\rho_{old} \gets \rho$;
-      \State $\rho \gets \langle c, r \rangle$;
-      \State
-      \If{$k > 0$}
-        \State $\beta \gets \rho/\rho_{old}$;
-        \State $u \gets \beta u$;
-      \EndIf
-      \State
-      \State $u \gets c + u$;
-      \State $w \gets Au$;
-      \State $\gamma \gets \langle u, w \rangle$;
-      \State $\alpha \gets \rho/\gamma$;
-      \State $r \gets r - \alpha w$;
-      \State $x \gets x + \alpha u$;
-    \EndWhile
-  \end{algorithmic}
-\end{algorithm}
-
-\subsection{Choice of preconditioner}
-If $A$ is positive definite, the diagonal tells us a lot about the properties of $A$ so it makes a certain amount of sense to consider perhaps the simplest preconditioner of all:
-\[
-  P = \text{diag}(a_{11}, \ldots, a_{nn}).
-\]
-The beauty of this preconditioner is the fact that its sparsity pattern is just like a dense vector. We will use this fact to implement a sparse parallel CG with (rudimentary) preconditioning.
-
-A more advanced preconditioner that is often used in the symmetric positive definite case is Incomplete Cholesky.  The Cholesky factorization of a positive definite matrix $A$ is $A = LL^*$ with $L$ a lower triangular matrix. An incomplete Cholesky factorization is any sparse lower triangular $K$ that is in some sense close to $L$. One such $K$ can be found by finding the exact Cholesky decomposition, except that any entry is set to zero if the corresponding entry in $A$ is also zero. \cite[\S11.5.8]{golub}
 
 \section{Parallellizing CG}
 With our sequential algorithm in hand, we are now ready to parallellize the Conjugate gradient method. Given the symmetric positive definite matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
@@ -281,9 +168,6 @@ Summing everything together, we get a total BSP cost per iteration of
 \]
 
 TODO wat nu? dit relateren aan het aantal iteraties dat nodig is? Wordt snel sketchy
-
-\subsection{Parallel CG with diagonal preconditioner}
-TODO
 
 \section{Testing our parallel CG}
 To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in the book: create a random sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
@@ -357,7 +241,7 @@ If we look at $t_{mv}$ and $t_{ip}$ separately, we see that for $p=1$, $t_{mv}$ 
 \[
   (p - 5\log_2 p) + (p + \log_2 p - 1)g + (2-\log_2 p)l > 0
 \]
-the new strategy is better. A quick inspection yields that this is true for $p \leq 4$ and \emph{very} false (values being in the order of negative millions), indicating that we won't have to try.
+the new strategy is better. A quick inspection yields that this is true for $p \leq 4$ and \emph{very} false (values being in the order of negative millions) for $p > 4$, indicating that we won't have to try.
 
 \begin{figure}
   \includegraphics[width=0.48\linewidth]{n2048d0_1mvip.png}
@@ -368,10 +252,173 @@ the new strategy is better. A quick inspection yields that this is true for $p \
   \label{fig:samples}
 \end{figure}
 
-\section{Creating FEM matrices}
-\section{hoe heette het ook alweer als je na een kleine verandering in je matrix opnieuw ging optimizen}
+\section{Creating the FEM-mesh}
+In two dimensions, different domains $\Omega$ provide vastly different problems of the form \eqref{eqn:problem}. We chose to generate a mesh using \cite{TODOJAN}. To find a partitioning for this mesh, we used the Mondriaan hypergraph partitioning tool.
+
+First, we create some mesh and save it to disk in some file format. We then transform this into a hypergraph, which we store in the coordinate scheme which Mondriaan can import. We then run Mondriaan on this file, receiving a triangle distribution. We load this file into a distributed mesh and save this mesh to file.
+
+The most theoretically interesting step is converting a mesh to a hypergraph. We have a set of vertex coordinates $V = \{v_1, \ldots, v_{nverts}\}$ with $v = (x, y)$ and a set of triangles $T = \{ t_1, \ldots, t_{ntris}\}$ with each triangle expressed in its vertices: $t = (v_{i_1}, v_{i_2}, v_{i_3})$. Then we have a list $B = (b_1, \ldots, b_{nverts})$ denoting if vertex $v_i$ is on the boundary $b_i = 1$ or not $b_i = 0$.
+
+A hypergraph is a generalization of a graph where hyperedges (also called \emph{nets}) are allowed to connect any number of hypervertices. We will identify triangles in the mesh with hypervertices, and vertices in the mesh with nets. A net connects triangles iff its corresponding vertex is a vertex of all these triangles. TODO beter uitleggen.
+
+\section{FEM and CG}
+We are now trying to solve a FEM system using CG. More specifically, we want to find a (numerical) solution to the two-dimensional PDE
+\begin{equation}
+  \label{eqn:fem}
+  \begin{cases} -\Delta u = f & \text{ in } \Omega \\ u = 0 & \text{ on } \partial \Omega \end{cases}
+\end{equation}
+with $\Omega$ a polygonal domain. In this report, we will look at $f=1$, further narrowing the problem.
+
+The idea of the Finite Element Method is to find the projection of $u \in C^2_0(\Omega)$ -- twice continuously differentiable functions that are zero on the boundary of $\Omega$ -- onto some (finite dimensional) linear subspace $V$. We will take $V$ to be the space of piecewise linear functions, subject to some partitioning of $\Omega$ into \emph{elements}. Often, these elements will be triangular. Choosing $\Omega$ to be polygonal allows us to triangulate $\Omega$ into triangles $T = \{ T_0, \ldots T_{N-1}\}$ with vertices $X = \{x_0, \ldots, x_{n-1}\}$. We will order these vertices such that $x_0, \ldots, x_{D-1}$ lie in $\Omega$ with $x_{D}, \ldots, x_{n-1}$ on $\partial \Omega$.
+
+This triangulation cannot be arbitrary, as this introduces \emph{hanging nodes} and other nasty side-effects. We assume triangulations to be \emph{conforming}; in this report, this means that ``everything works nicely''.
+
+The fact that functions in $V$ are zero on the boundary implies that $\dim(V) = D$. A useful basis for this subspace $V$ is the \emph{nodal} basis $\Phi = \{\phi_i: 0 \leq i < D\}$ of hat functions uniquely determined by the property
+\[
+  \phi_i( v_j) = \delta_{ij} \quad \forall~~0 \leq i < D, 0 \leq j < N.
+\]
+
+The crux of the Finite Element method is that we can actually find the projection $u_V$ of $u$ into $V$ \emph{without knowing the exact solution $u$}! Write $u_V$ in the nodal basis:
+\[
+  u_V = \sum_{i=0}^{D-1} \alpha_i \phi_i.
+\]
+Then, $u_V$ can be proven \cite{TODO} to be the solution to the system
+\[
+  A\vec \alpha = b, a_{ij} := a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j, \quad b_i = \int_\Omega \phi_i.
+\]
+
+The matrix $A$ is called the \emph{stiffness matrix}, which is \cite{TODORAYMOND} a symmetric positive definite matrix. It is also a sparse matrix, as the basis functions only `interact' with a small number of neighbours.
+
+In the coming sections, we will look at the two steps involved in solving such a FEM-system:
+\begin{description}
+  \item[Assembly] is the act of finding the nonzero entries of $A$ and $b$;
+  \item[Solving] the system; as $n$ (and thus $D$) is generally very large, we want to use an efficient solver. We will be using CG.
+\end{description}
+
+\subsection{System assembly}
+How can we find the elements of the stiffness matrix in an efficient manner? In other words, how do we calculate $a(\phi_i, \phi_j)$? The following elegant derivation uses the fact that the domain can be decomposed into triangles:
+\begin{equation}
+  \label{eqn:div}
+  a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j = \sum_{n = 0}^{N-1} \int_{T_n} \nabla \phi_i \cdot \nabla \phi_j =: \sum_{n=0}^{N-1}a_{T_n}(\phi_i, \phi_j).
+\end{equation}
+
+We will call the matrix $A_T$ with $(a_T)_{ij} = a_T(\phi_i, \phi_j)$ the \emph{element matrix} of $T$ containing information on interactions of basis functions restricted to $T$. This reduces the problem of finding the stiffness matrix to finding the element matrices. Note that these matrices are very sparse: in fact, they only have $3 \times 3$ nonzeros as there are only 3 basis functions that have interactions in this element. Therefore, we will compute a $3 \times 3$ matrix $\hat A_T$ and scale this up to the $D \times D$ element matrix $A_T$.
+
+In fact, this $3 \times 3$ matrix can be computed in a variety of ways. One way is to use
+\[
+  D = \begin{bmatrix} v_{0} & v_{1} & v_{2} \end{bmatrix} \in \R^{ 2 \times 3}
+\]
+with $v_{i}$ the $i$th vertex of triangle $T$. Then one can prove \cite{TODO} that
+\[
+  \hat A_T = \frac{D^\top D}{4 \cdot \text{vol}(T)}
+\]
+with $\text{vol}(T)$ the volume of triangle $T$.
+
+We can compute the right-hand side $b_i$ in much the same way. We again write
+\[
+  b_i = \int_\Omega \phi_i = \sum_{n=0}^N \int_{T_n} \phi_i
+\]
+and use \cite{TODOJAN}
+\[
+\int_{T_n} \phi_i = \begin{cases} \text{vol}(T_n)/3 & \text{ if } x_i \in T_n \\ 0 & \text{ else} \end{cases}.
+\]
+
+\subsection{Solving the system}
+In the previous section we saw how to assemble the FEM system. One could use this approach to create a `naive' parallel FEM solver: let one processor assemble the system, find a parallel distribution (using e.g. Mondriaan) and apply the parallel CG algorithm. This has a few disadvantages:
+\begin{enumerate}
+  \item Matrix assembly is computationally expensive;
+  \item This system is possibly enormous, limiting us to systems that fit in memory of a single processor;
+  \item The relation between the geometrical object, triangulation and nonzeros is lost: $a_{ij}$ is nonzero iff $\phi_i$ and $\phi_j$ interact, which only happens if $x_i$ and $x_j$ are connected by an edge.
+\end{enumerate}
+
+We will look at a smarter approach which solves these disadvantages. Instead of distributing the matrix nonzeros $a_{ij}$ between processors, we distribute the triangles $T_n$ over $p$ processors, thereby solving disadvantage (3). We divide our triangulation into $p$ disjoint sets of length $N_q$
+\[
+  T = \bigsqcup_{q=0}^{p-1} T^q, \quad T^q = \{ T^q_0, \ldots, T^q_{N_q-1} \}
+\]
+leading to a partition of $\Omega$.
+
+A side-effect of this is that a vertex $x_i$ can belong to multiple processors. Therefore we define its \emph{processor set} 
+\[
+  \Pi: \{0, \ldots, D-1\} \to 2^{\{0, \ldots, p-1\}}: i \mapsto \Pi(i)
+\]
+as the set of processors that contain $x_i$ in one of their triangles.
+
+Using \eqref{eqn:div} leads to a natural decomposition of $A$ into
+\[
+  A = \sum_{q=0}^{p-1} A^q = \sum_{q=0}^{p-1} \sum_{n=0}^{N_q-1} A_{T^q_n}.
+\]
+These matrices $A^q$ are $D \times D$ but again very sparse. We identify $A^q$ with a smaller matrix $\hat A^q$ of size $D_q \times D_q$ by removing zero rows and columns. As CG requires the calculation of $v = Au$, we will first calculate $v^q = A^q u$ (which is in practice done by computing the smaller system $\hat v^q = \hat A^q \hat u$ and communicate nonzeros to every processor in its processor set, ultimately finding $v$ in a distributed fashion. See Algorithm~\ref{alg:TODO}.
+
+\subsection{Finding a processor distribution}
+Given a vertex $x_i$, there are two possibilities:
+\begin{enumerate}
+  \item $|\Pi(i)| = 1$. This means that all interactions of the basis function $\phi_i$ are stored on a single processor $q$, meaning that $(Au)_i = (A^qu)_i$ or in other words, no communication is necessary. This corresponds with $x_0$ in Figure~\ref{fig:procset};
+  \item $|\Pi(i)| > 1$. Interactions of $\phi_i$ are stored on different processors. To compute $(Au)_i$, we need to communicate with $|\Pi(i)|-1$ processors. This corresponds with vertices $x_1, x_2$ in Figure~\ref{fig:procset}.
+\end{enumerate}
+
+\begin{figure}
+  \includegraphics[width=0.5\linewidth]{procset.png}
+  \caption{A sample mesh with its processor distribution. Only vertices not on the boundary have been numbered. For these vertices, $\Pi(0) = \{0, 1, 2, 3\}, \Pi(1) = \{0\}, \Pi(2) = \{0, 1\}$.}
+  \label{fig:procset}
+\end{figure}
+
+Here we see the second advantage of this approach. By distributing triangles, we can balance computation and communication cost of a matrix-vector multiplication. We chose to use Mondriaan, using \cite{bissmondriaan,biss2012}.
 
 \section{Future work}
+\subsection{Preconditioned CG}
+The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
+\[
+  \frac{\|x - x_k\|_A}{\|x - x_0\|_A} \leq 2 \left( \frac{ \sqrt{\kappa_2(A)}-1}{\sqrt{\kappa_2(A)}+1}\right)^k \leq 2 \exp \left( -\frac{2k}{\sqrt{\kappa_2(A)}}\right) 
+\]
+where $\kappa_2(A)$ is the $2$-condition number of $A$, which for symmetric positive definite matrices equates
+\[
+  \kappa_2(A) = \frac{\lambda_{max}}{\lambda_{min}}.
+\]
+It is therefore of interest to create a condition number that is as low as possible.
+
+A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a smaller condition number than $A$. As the theoretical convergence rate is highly dependent on the condition number, we can improve this using such a preconditioner. Instead of solving $Ax = b$, we will solve $P^{-1}Ax = P^{-1}b$. This preconditioner should satisy:
+\begin{itemize}
+  \item Convergence time should be faster for the preconditioned system. Normally, this means that $P$ is constructed as an ``easily invertible'' approximation to $A$;
+  \item Operations with $P^{-1}$ should be easy to perform;
+  \item $P$ should be (relatively) easy to construct.
+\end{itemize}
+
+TODO uitleggen wat implicit preconditioning precies inhoudt
+
+Algorithm~\ref{alg:pcg} shows CG with implicit preconditioning. \cite[Lect.~10]{sleij}
+\begin{algorithm}
+  \caption{CG with implicit preconditioning \cite[Lect.~10]{sleij}}
+  \label{alg:pcg}
+  \begin{algorithmic}
+    \State $\rho \gets 1$;
+    \While{asdf}
+      \State $c \gets P^{-1} r$; \Comment{Solve $Pc = r$ for c}
+      \State $\rho_{old} \gets \rho$;
+      \State $\rho \gets \langle c, r \rangle$;
+      \State
+      \If{$k > 0$}
+        \State $\beta \gets \rho/\rho_{old}$;
+        \State $u \gets \beta u$;
+      \EndIf
+      \State
+      \State $u \gets c + u$;
+      \State $w \gets Au$;
+      \State $\gamma \gets \langle u, w \rangle$;
+      \State $\alpha \gets \rho/\gamma$;
+      \State $r \gets r - \alpha w$;
+      \State $x \gets x + \alpha u$;
+    \EndWhile
+  \end{algorithmic}
+\end{algorithm}
+
+\subsection{Choice of preconditioner}
+If $A$ is positive definite, the diagonal tells us a lot about the properties of $A$ so it makes a certain amount of sense to consider perhaps the simplest preconditioner of all:
+\[
+  P = \text{diag}(a_{11}, \ldots, a_{nn}).
+\]
+The beauty of this preconditioner is the fact that its sparsity pattern is just like a dense vector. Therefore, given a vector distribution (like we already have in our implementation), creating a preconditioned version is easy. We did not have time to implement this.
+
+A more advanced preconditioner that is often used in the symmetric positive definite case is Incomplete Cholesky.  The Cholesky factorization of a positive definite matrix $A$ is $A = LL^*$ with $L$ a lower triangular matrix. An incomplete Cholesky factorization is any sparse lower triangular $K$ that is in some sense close to $L$. One such $K$ can be found by finding the exact Cholesky decomposition, except that any entry is set to zero if the corresponding entry in $A$ is also zero. \cite[\S11.5.8]{golub}
 \subsection{Adaptive FEM}
 
 
