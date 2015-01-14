@@ -209,6 +209,12 @@ N = np.array([x, y]).T
 T = t.astype('int')
 G = b.astype('int')
 	
+for i in range(10):
+    print "Refine"
+    N,T,G = Refine(N,T,G)
+    plottri.writemesh( "faka%d.m" % i, N, T, G)
+    print G.shape
+
 f = lambda pt: 1
 g = 0
 uh, sol, A, M = LinFEM(N,T,G,f,g)

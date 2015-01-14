@@ -2,6 +2,16 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
+def writemesh( fn, N, T, G):
+  fp = open( fn, 'w')
+
+  fp.write("%%sequential\n")
+  fp.write("%d %d\n" % ( N.size/2, T.size/3))
+  for i in range( N.size/2):
+    fp.write( "%g %g %d\n" % (N[i][0], N[i][1], G[i]))
+  for i in range( T.size/3):
+    fp.write( "%d %d %d\n" % (T[i][0], T[i][1], T[i][2]))
+
 def readmesh( fn):
     fp = open( fn)
 

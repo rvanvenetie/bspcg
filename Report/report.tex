@@ -6,7 +6,7 @@
 \usepackage{hyperref}
 \usepackage{algpseudocode}
 \usepackage{todonotes}
-\usepackage{algorithm}
+\usepackage[noline,ruled]{algorithm2e}
 \usepackage{enumerate}
 \usepackage{graphicx}
 %\setlength{\parindent}{0pt}
@@ -40,11 +40,17 @@
 \DeclareMathOperator{\vol}{vol}
 
 
+
 \begin{document}
 
 \title{Parallel Conjugate Gradients on sparse stiffness matrices}
 \author{Raymond van Veneti\"e \and Jan Westerdiep}
 \maketitle
+\begin{figure}[h!]
+	\center
+  \includegraphics[scale=0.5]{Ray_surf.jpg}
+   \caption{Happy, because I'm next to cartesius}
+\end{figure}
 
 \section{Introduction}
 \begin{quote}
@@ -66,38 +72,40 @@ In this report, we will look at a parallel implementation of the conjuate gradie
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS \cite{blas} routines.
 
-\begin{algorithm}
+\begin{algorithm}[H]
 \caption{Sequential CG}
 \label{alg:seqcg}
-\begin{algorithmic}[1]
-  \Require{$k_{max} \in \N$, $\e \in \R$, $n \in \N$, $A$ symmetric $n \times n$, $b \in \R^n$}
-  \Ensure{$x \in \R^n$ with $Ax \approx b$}
-  \State int $k := 0$;
-  \State float $r[n], u[n] = \vec 0, w[n]$;
-  \State float $\rho, \rho_{old}, nbsq, \alpha, \beta, \gamma$;
-  \State
-  \State $r \gets b$;
-  \State $\rho \gets \langle r, r \rangle$;
-  \State $nbsq \gets \rho$;
-  \State
-  \While{$\rho > \e^2 \cdot nbsq \wedge k < k_{max}$}
-    \If{$k > 0$}
-      \State $\beta \gets \rho/\rho_{old}$;
-      \State $u \gets \beta u$;\label{line:scaleu}
-    \EndIf
-    \State
-    \State $u \gets r + u$;\label{line:axpyu}
-    \State $w \gets Au$;\label{line:mvw}
-    \State $\gamma \gets \langle u, w\rangle$;\label{line:ipgamma}
-    \State $\alpha \gets \rho/\gamma$;
-    \State $x \gets x + \alpha u$;\label{line:axpyx}
-    \State $r \gets r - \alpha w$;\label{line:axpyr}
-    \State $\rho_{old} \gets \rho$;
-    \State $\rho \gets \langle r, r \rangle$;\label{line:iprho}
-    \State
-    \State $k \gets k+1$;
-  \EndWhile
-\end{algorithmic}
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\SetKwInOut{Output}{Outout}
+  \Input{$k_{max} \in \N$, $\e \in \R$, $n \in \N$, $A$ symmetric $n \times n$, $b \in \R^n$}
+  \Output{$x \in \R^n$ with $Ax \approx b$}
+   int $k := 0$\;
+   float $r[n], u[n] = \vec 0, w[n]$\;
+   float $\rho, \rho_{old}, nbsq, \alpha, \beta, \gamma$\;
+  
+   $r \gets b$\;
+   $\rho \gets \langle r, r \rangle$\;
+   $nbsq \gets \rho$\;
+  
+	 \While{$\rho > \e^2 \cdot nbsq \wedge k < k_{max}$} {
+	\uIf{$k > 0$} {
+       $\beta \gets \rho/\rho_{old}$\;
+       $u \gets \beta u$\;\label{line:scaleu}
+		}
+    
+    
+     $u \gets r + u$\;\label{line:axpyu}
+     $w \gets Au$\;\label{line:mvw}
+     $\gamma \gets \langle u, w\rangle$\;\label{line:ipgamma}
+     $\alpha \gets \rho/\gamma$\;
+     $x \gets x + \alpha u$\;\label{line:axpyx}
+     $r \gets r - \alpha w$\;\label{line:axpyr}
+     $\rho_{old} \gets \rho$\;
+     $\rho \gets \langle r, r \rangle$\;\label{line:iprho}
+    
+     $k \gets k+1$\;
+	 }
 \end{algorithm}
 
 \subsection{Sparse CG}
@@ -105,24 +113,6 @@ As FEM matrices are sparse in nature, we will adapt Algorithm~\ref{alg:seqcg} to
 
 Our storage format uses the so-called coordinate scheme; we store tuples $(i, j, a_{ij})$ with $i$ the row number, $j$ the column number and $a_{ij}$ the matrix value at this position. The Matrix Market file format adds some headers, e.g. to denounce symmetry so that one only has to store the lower triangular part. We denote by $nz(A)$ the amount of nonzero elements in this lower triangular part. If we store the list of tuples in three lists of length $nz(A)$, namely $I$, $J$ and $v$, we can compute a sequential sparse matrix-vector multiplication using Algorithm~\ref{alg:sparsemv} (from \cite[Alg.~4.3]{biss04}).
 
-\begin{algorithm}
-\caption{Sequential sparse matrix vector multiplication: find $y \gets \alpha A x + \beta y$ for symmetric $A$}
-\label{alg:sparsemv}
-\begin{algorithmic}[1]
-  \Require{$\alpha \in \R$, $\beta \in \R$, $n \in \N$, amount of nonzeroes $nz(A)$, $I \in \N^{nz(A)}$, $J \in \N^{nz(Z)}$, $v \in \R^{nz(A)}$, $x \in \R^n$, $y \in \R^n$}
-  \Ensure{$y \gets \alpha Ax + \beta y$}
-  \For{$i = 0$ until $n$}
-    \State $y[i] = \beta y[i]$;
-  \EndFor
-
-  \For{$j=0$ until $nz(A)$}
-    \State $y[I[j]] = \alpha v[j] x[J[j]] + y[I[j]]$;
-    \If{$I[j] \not= J[j]$} \Comment{$A$ is symmetric}
-      \State $y[J[j]] = \alpha v[j] x[I[j]] + y[J[j]]$;
-    \EndIf
-  \EndFor
-\end{algorithmic}
-\end{algorithm}
 
 
 \section{Parallellizing CG}
@@ -135,24 +125,25 @@ The resulting parallel algorithm is in appearance almost exactly as Algorithm~\r
 \begin{algorithm}
   \caption{Parallel inner product $\langle v, y \rangle$ assuming $v$ and $y$ have equal distributions}
   \label{alg:ip}
-  \begin{algorithmic}
-    \Require{$p$ total number of processors, $0 \leq s < p$ current processor number, $nv_s$ the amount of vector elements locally stored, $v_s,y_s \in \R^{nv_s}$ local vectors}
-    \Ensure{$\alpha = \langle v, y \rangle$}
-    \State float $\alpha_s = 0$;
-    \State float $\alpha = 0$;
-    \State 
-    \For{$i = 0$ to $nv_s$}\Comment{Compute local inner product}
-      \State $\alpha \gets \alpha + v_s[i] \cdot y_s[i]$;
-    \EndFor
-    \State 
-    \For{$q = 0$ to $p$}\Comment{Put local inner product}
-      \State Put $\alpha_s$ to $P(q)$;
-    \EndFor
-    \State 
-    \For{$q = 0$ to $p$}\Comment{Find global inner product}
-      \State $\alpha \gets \alpha + \alpha_q$;
-    \EndFor
-  \end{algorithmic}
+	\SetKw{KwStep}{step}
+	\SetKwInOut{Input}{Input}  
+	\SetKwInOut{Output}{Outout}
+    \Input{$p$ total number of processors, $0 \leq s < p$ current processor number, $nv_s$ the amount of vector elements locally stored, $v_s,y_s \in \R^{nv_s}$ local vectors}
+    \Output{$\alpha = \langle v, y \rangle$}
+		float $\alpha_s = 0$\;
+		float $\alpha = 0$\;
+		\tcc{Compute local inner product}
+		\For{$i = 0$ to $nv_s$} {
+			$\alpha \gets \alpha + v_s[i] \cdot y_s[i]$
+		}
+		\tcc{Put local inner prodcut}
+		\For{$q = 0$ to $p$} {
+			Put $\alpha_s$ to $P(q)$\;
+		}
+		\tcc{Find global inner product}
+		\For{$q = 0$ to $p$} {
+			$\alpha \gets \alpha + \alpha_q$\;
+		}
 \end{algorithm}
 
 \subsection{BSP cost}
@@ -261,14 +252,21 @@ We are now trying to solve a FEM system using CG. More specifically, we want to 
 \end{equation}
 with $\Omega$ a polygonal domain. In this report, we will look at $f=1$, further narrowing the problem.
 
-The idea of the Finite Element Method is to find the projection of $u \in C^2_0(\Omega)$ -- twice continuously differentiable functions that are zero on the boundary of $\Omega$ -- onto some (finite dimensional) linear subspace $V$. We will take $V$ to be the space of piecewise linear functions, subject to some partitioning of $\Omega$ into \emph{elements}. Often, these elements will be triangular. Choosing $\Omega$ to be polygonal allows us to triangulate $\Omega$ into triangles $T = \{ T_0, \ldots T_{N-1}\}$ with vertices $X = \{x_0, \ldots, x_{n-1}\}$. We will order these vertices such that $x_0, \ldots, x_{D-1}$ lie in $\Omega$ with $x_{D}, \ldots, x_{n-1}$ on $\partial \Omega$.
+The idea of the Finite Element Method is to find the projection of $u \in C^2_0(\Omega)$ -- twice continuously differentiable functions that are zero on the boundary of $\Omega$ -- onto some (finite dimensional) linear subspace $V$. We will take $V$ to be the space of piecewise linear functions, subject to some partitioning of $\Omega$ into \emph{elements}. Often, these elements will be triangular. Choosing $\Omega$ to be polygonal allows us to triangulate $\Omega$ into triangles $T = \{ T_0, \ldots T_{N-1}\}$ such that $\Omega = \cup_{k = 0}^{N-1}T_k$. We will denote the vertices of these triangles with $X = \{x_0, \ldots, x_{n-1}\}$ and order them such that $x_0, \ldots, x_{D-1}$ lie in $\Omega$ with $x_{D}, \ldots, x_{n-1}$ on $\partial \Omega$.
 
 This triangulation cannot be arbitrary, as this introduces \emph{hanging nodes} and other nasty side-effects. We assume triangulations to be \emph{conforming}; in this report, this means that ``everything works nicely''.
 
-The fact that functions in $V$ are zero on the boundary implies that $\dim(V) = D$. A useful basis for this subspace $V$ is the \emph{nodal} basis $\Phi = \{\phi_i: 0 \leq i < D\}$ of hat functions uniquely determined by the property
+The fact that functions in $V$ are zero on the boundary implies that $\dim(V) = D$. The number $D$ is also called the \emph{degrees of freedom}(DOF) for a given triangulation. A useful basis for this subspace $V$ is the \emph{nodal} basis $\Phi = \{\phi_i: 0 \leq i < D\}$ of hat functions uniquely determined by the property
 \[
-  \phi_i( v_j) = \delta_{ij} \quad \forall~~0 \leq i < D, 0 \leq j < N.
-\]
+  \phi_i( x_j) = \delta_{ij} \quad \forall~~0 \leq i < D,\, 0 \leq j < N.
+\] An example of such a basis function is given in Figure~\ref{fig:nodal}.
+\begin{figure}[h!]
+	\centering
+	\includegraphics[width=0.5\linewidth]{nodal_vijfhoek.eps}
+\caption{Example of a basis function for a pentagon}
+\label{fig:nodal}
+\end{figure}
+
 
 The crux of the Finite Element method is that we can actually find the projection $u_V$ of $u$ into $V$ \emph{without knowing the exact solution $u$}! Write $u_V$ in the nodal basis:
 \[
@@ -276,7 +274,7 @@ The crux of the Finite Element method is that we can actually find the projectio
 \]
 Then, $u_V$ can be proven \cite{TODO} to be the solution to the system
 \[
-  A\vec \alpha = b, a_{ij} := a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j, \quad b_i = \int_\Omega \phi_i.
+	A\vec \alpha = b \text{ with }  A_{ij} := a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j \text{ and } b_i = \int_\Omega \phi_i.
 \]
 
 The matrix $A$ is called the \emph{stiffness matrix}, which is \cite{TODORAYMOND} a symmetric positive definite matrix. It is also a sparse matrix, as the basis functions only `interact' with a small number of neighbours.
@@ -291,10 +289,11 @@ In the coming sections, we will look at the two steps involved in solving such a
 How can we find the elements of the stiffness matrix in an efficient manner? In other words, how do we calculate $a(\phi_i, \phi_j)$? The following elegant derivation uses the fact that the domain can be decomposed into triangles:
 \begin{equation}
   \label{eqn:div}
-  a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j = \sum_{n = 0}^{N-1} \int_{T_n} \nabla \phi_i \cdot \nabla \phi_j =: \sum_{n=0}^{N-1}a_{T_n}(\phi_i, \phi_j).
+	a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j = \int_{T_0 \cup \dots \cup T_{N-1}} \nabla \phi_i \cdot \nabla \phi_j = \sum_{n = 0}^{N-1} \int_{T_n} \nabla \phi_i \cdot \nabla \phi_j =: \sum_{n=0}^{N-1}a_{T_n}(\phi_i, \phi_j).
 \end{equation}
 
-We will call the matrix $A_T$ with $(a_T)_{ij} = a_T(\phi_i, \phi_j)$ the \emph{element matrix} of $T$ containing information on interactions of basis functions restricted to $T$. This reduces the problem of finding the stiffness matrix to finding the element matrices. Note that these matrices are very sparse: in fact, they only have $3 \times 3$ nonzeros as there are only 3 basis functions that have interactions in this element. Therefore, we will compute a $3 \times 3$ matrix $\hat A_T$ and scale this up to the $D \times D$ element matrix $A_T$.
+We will call the matrix $A_T$ with $(A_T)_{ij} = a_T(\phi_i, \phi_j)$ the \emph{element matrix} of triangle $T$ containing information on interactions of basis functions restricted to $T$. This reduces the problem of finding the stiffness matrix to finding the element matrices. Note that these matrices are very sparse: in fact, they only have $3 \times 3$ nonzeros as there are only 3 basis functions that have interactions per triangle. Therefore, we will compute a $3 \times 3$ matrix $\hat A_T$ and scale this up to the $D \times D$ element matrix $A_T$.
+
 
 In fact, this $3 \times 3$ matrix can be computed in a variety of ways. One way is to use
 \[
@@ -306,28 +305,59 @@ with $v_{i}$ the $i$th vertex of triangle $T$. Then one can prove \cite{TODO} th
 \]
 with $\text{vol}(T)$ the volume of triangle $T$.
 
-We can compute the right-hand side $b_i$ in much the same way. We again write
+We can compute the right-hand side $b_i$ in much the same way. One can proof that
 \[
   b_i = \int_\Omega \phi_i = \sum_{n=0}^N \int_{T_n} \phi_i
-\]
-and use \cite{TODOJAN}
-\[
-\int_{T_n} \phi_i = \begin{cases} \text{vol}(T_n)/3 & \text{ if } x_i \in T_n \\ 0 & \text{ else} \end{cases}.
+	= \sum_{n=0}^N \mathbf{1}_{T_n}(x_i)\text{vol}(T_n)/3.
 \]
 
+With these notes we can easily derive Algorithm~\ref{alg:calc_fem} which constructs a FEM-system for a given triangulation.
+
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\SetKwInOut{Output}{Outout}
+\Input{$X : $ list of vertices, \\
+       $T : $ list of $N$ triangles, \\
+		   $D : $  degrees of freedom.}
+\Output{$ A : $ sparse $d\times d$ FEM-matrix , \\
+	      $ b : $ vector of length $D$, the rhs of the system.}
+	\tcc{Initalize to zero}
+	$b := 0$\;
+	$A := 0$\;
+	\For{$k : 0 \leq k < N$} {
+		Generate element matrix $\hat A_{T_k}$\;
+		\tcc{Loop over indices in the element matrix}
+		\For{$li : 0\leq li < 3$} {
+			Calculate global index $i$ corresponding to $li$\;
+			\tcc{Check if vertex $li$ corresponds to a DOF}
+			\uIf{$i < D$} {
+				$b_i = b_i + \text{vol}(T_k)/3$\;
+				\For{$lj : 0 \leq lj < 3$} {
+					Calculate global index $j$ corresponding to $lj$\;
+					\uIf{$ j < D$} {
+						$A_{i,j} := A_{i,j} + (A_{T_k})_{li,lj}$\;
+					}
+				}
+			}
+		}
+	}
+ \caption{Calculate the FEM-matrix.}
+ \label{alg:calc_fem}
+\end{algorithm}
 \subsection{Solving the system}
-In the previous section we saw how to assemble the FEM system. One could use this approach to create a `naive' parallel FEM solver: let one processor assemble the system, find a parallel distribution (using e.g. Mondriaan) and apply the parallel CG algorithm. This has a few disadvantages:
+In the previous section we saw how to assemble the FEM system. One could use this approach to create a `naive' parallel FEM solver: let one processor assemble the system, find a parallel distribution (using e.g. Mondriaan) and apply the parallel CG algorithm described in Section\cite{BLA}. This has a few disadvantages:
 \begin{enumerate}
   \item Matrix assembly is computationally expensive;
   \item This system is possibly enormous, limiting us to systems that fit in memory of a single processor;
   \item The relation between the geometrical object, triangulation and nonzeros is lost: $a_{ij}$ is nonzero iff $\phi_i$ and $\phi_j$ interact, which only happens if $x_i$ and $x_j$ are connected by an edge.
 \end{enumerate}
 
-We will look at a smarter approach which solves these disadvantages. Instead of distributing the matrix nonzeros $a_{ij}$ between processors, we distribute the triangles $T_n$ over $p$ processors, thereby solving disadvantage (3). We divide our triangulation into $p$ disjoint sets of length $N_q$
+We will look at a smarter approach which solves these disadvantages. Instead of distributing the matrix nonzeros $A_{ij}$ between processors, we distribute the triangles $T_n$ over $p$ processors, thereby solving disadvantage (3). We divide our triangulation into $p$ disjoint sets of length $N_q$
 \[
   T = \bigsqcup_{q=0}^{p-1} T^q, \quad T^q = \{ T^q_0, \ldots, T^q_{N_q-1} \}
 \]
-leading to a partition of $\Omega$.
+leading to the partition $\Omega = T^0 \cup \dots \cup T^{p-1}$.
 
 A side-effect of this is that a vertex $x_i$ can belong to multiple processors. Therefore we define its \emph{processor set} 
 \[
@@ -337,10 +367,105 @@ as the set of processors that contain $x_i$ in one of their triangles.
 
 Using \eqref{eqn:div} leads to a natural decomposition of $A$ into
 \[
-  A = \sum_{q=0}^{p-1} A^q = \sum_{q=0}^{p-1} \sum_{n=0}^{N_q-1} A_{T^q_n}.
+	A = \sum_{q=0}^{p-1} A^q\quad \text{ with } A^q= \sum_{n=0}^{N_q-1} A_{T^q_n} \quad \text{ so that } (A^q)_{ij} = \sum_{n=0}^{N_q-1} a_{T_n}(\phi_i,\phi_j).
 \]
-These matrices $A^q$ are $D \times D$ but again very sparse. We identify $A^q$ with a smaller matrix $\hat A^q$ of size $D_q \times D_q$ by removing zero rows and columns. As CG requires the calculation of $v = Au$, we will first calculate $v^q = A^q u$ (which is in practice done by computing the smaller system $\hat v^q = \hat A^q \hat u$ and communicate nonzeros to every processor in its processor set, ultimately finding $v$ in a distributed fashion. See Algorithm~\ref{alg:TODO}.
+These matrices $A^q$ are $D \times D$ but again very sparse. We identify $A^q$ with a smaller matrix $\hat A^q$ of size $D_q \times D_q$ by removing zero rows and columns. As CG requires the calculation of $v = Au$, we will first calculate $v^q = A^q u$ (which is in practice done by computing the smaller system $\hat v^q = \hat A^q \hat u$). Now to find the final solution we need to calculate $v = \sum_{q =0}^{p-1} v^q$. 
+Every non-zero element in $v^q$ corresponds to a vertex $x_i$ \footnote{Actually to a degree of freedom, but in our case degrees of freedom correspond to vertices inside the domain}, which is shared by the processors in its processor set $\Pi(i)$. To ensure that every processor in $\Pi(i)$ has the correct value of $v_i$ we must communicate the value of this nonzero in $v^q$ to all the processors in $\Pi(i)$. In Algorithm~\ref{alg:fem_mv} we give the implementation of this parallel $v = Au$ for this FEM-matrix.
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\Input{$A^s: $ sparse (local) FEM-matrix for $P(s)$, such that
+	     $A = \sum_{t=0}^{p-1} A^t$, \\
+       $\Pi : \{0, \dots, D-1\} \to 2^p$, \\
+			 $v : $ vector of length $D$, $\text{distr}(v) = \Pi$.}
+\KwOut{$u : Av$, $\text{distr}(u) = \Pi$}
+	\nlset{(0)}
+	Local sparse symmetrical matrix-vector $u_s = A^s v$ by $\hat u_s = \hat A^s \hat v$\;
+	\nlset{(1)}
+	\For{$ i : 0 \leq i < D \wedge s \in \Pi(i)$} {
+		\For{$t \in \Pi(i)$} {
+			put $(u_s)_i$ in $P(t)$\;
+		}
+	}
+  
+  \nlset{(2)}
+	\For{$ i : 0 \leq i < D \wedge s \in \Pi(i)$} {
+		$u_i := 0$\;
+		\For{$t \in \Pi(i)$} {
+			$u_i := u_i + (u_t)_i$\;
+		}
+	}
+ \caption{Matrix-vector product for a FEM-system for $P(s)$}
+ \label{alg:mv_fem}
+\end{algorithm}
 
+To create $\hat A^q$ we need to identify the zero rows (and by symmetri columns) of $A^q$. A row $i$ is zero if $(A^q)_{ij} = 0$ for $0 \leq j < D$, which corresponds to the situation where basis function $\phi_i$ has no interactions on any of the triangles contained by processor $q$. Translating this back to the triangulation, we see that this happens if processor $q \not \in \Pi(i)$. This gives us an explicit formula for $D_q$:
+\[
+	D_q = \#\{ i | 0 \leq i < D,\, q \in \Pi(i)\}.
+\]
+
+Algorithm~\ref{alg:init_fem} describes how to create all the data needed for executing our parallel $Av$ with the stiffness matrix $A$.
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\SetKwInOut{Output}{Outout}
+\Input{$X :$ list of $n$ vertices, with first $D$ vertices corresponding to a DOF, \\
+	     $T : $ list of $N$ triangles, $\text{distr}(T) = \psi$.}
+\Output{$\Pi:$ proccesor set for each DOF, \\
+	     $\Pi_{\text{owner}}:$ the `owner' of a DOF, \\
+			 $A^s: $ local sparse FEM-matrix for $P(s)$, \\
+			 $b : $ vector of length $D$, $\text{distr}(b) = \Pi$.}
+  \nlset{(0)}
+	\If{$ s = 0$} {
+		Use $\phi$ to calculate $\Pi$, the processor set for each DOF\; 
+		Put the local amount of DOF, vertices and triangles in each processor\;
+	}
+  \nlset{(1)}
+	Allocate memory for the (local) FEM data\;
+	\nlset{(2)}
+	\If{$ s= 0$} {
+		\For{$i : 0 \leq i < N$} {
+			put $T(i)$ in $P(\psi(i))$\;
+			put vertices of $T(i)$ in $P(\psi(i))$ \tcc*[h]{Avoid duplicates in implementation}
+		}
+	}
+  \nlset{(3)}
+	Calculate local FEM-matrix $A^s$ and local right hand side $b^s$\;
+	
+  { Produce the entire vector $b$, same method as described in Alg~\ref{alg:mv_fem} }
+	\nlset{(4)}
+	Communicate entries of $b^s$ to processor sets, see superstep $(1)$ in Alg~\ref{alg:mv_fem}\;
+	\nlset{(5)}
+	Sum the values to find $b$, see superstep $(2)$ in Alg~\ref{alg:mv_fem}\;
+ \caption{Algorithm that calculates the local FEM data.}
+ \label{alg:init_fem}
+\end{algorithm}
+
+Note that the CG algorithm also requires us to calculate the inner product. 
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\Input{$x,y : $ vector of length $D$, \\
+	     $\Pi_{\text{owner}} : \{0, \dots, D-1\} \to P$,\\
+			 $\text{distr}(x) = \text{distr}(y) = \Pi_{\text{owner}}.$}
+\KwOut{$a  := \langle x, y\rangle$}
+\nlset{(0)}
+  $a_s := 0$\;
+	\For{$ i: 0 \leq i < D \wedge \Pi_{\text{owner}}(i) = s$} {
+	  $a_s := a_s + x_i y_i$\;
+	}
+\nlset{(1)}
+  \For{$ t: 0 \leq t < p$} {
+		put $a_s$ in $P(t)$\;
+	}
+\nlset{(2)}
+  $a := 0$\;
+  \For{$ t: 0 \leq t < p$} {
+		$a := a + a_t$\;
+	}
+ \caption{Inner product for vectors in FEM-system for $P(s)$}
+ \label{alg:ip_fem}
+\end{algorithm}
 \subsection{Finding a processor distribution}
 Given a vertex $x_i$, there are two possibilities:
 \begin{enumerate}
@@ -362,6 +487,29 @@ Here we see the second advantage of this approach. By distributing triangles, we
   \item[-] Every net $e_i\in V$ is given a \emph{net weight}. Mondriaan does not implement this, but to be future-proof, we set this to 1 for all vertices $v_i$ not on the boundary and 0 for boundary vertices. This reflects the fact that boundary vertices have no degree of freedom attached to it.
 \end{itemize}
 Mondriaan then aims to balance communication and computation cost between processors by creating a distribution of the hypervertices. It requires setting the amount of processors $p$ and a load imbalance factor $\epsilon$ which we set to $0.1$.
+
+\subsection{Implementation details}
+\subsubsection{FEM Matrix}
+Alg~\ref{alg:calc_fem} gives an algorithm to assemble the FEM Matrix. Here
+we assumed to have a method for inserting or adding nonzeros at abritrare positions in the matrix. However,
+this is not easily done in most data structures for sparse matrices as we do not know the
+indices holding a non-zero beforehand. We adapt the following strategy, we first create a list
+of all the nonzeros to add together in the triple format $(i,j,a_{ij})$.
+This list will contain multiple elements with the same index $ij$ when
+the basis function $i$ and $j$ interact on multiple triangles. Afterwards we know
+exactly what indices contain a nonzero. We then convert this triple format to the \emph{ICRS}
+\cite[p.~171]{biss04} format, summing the values for the same indices.
+
+As the matrix is symmetric we only store the lower triangular part. In Alg~\ref{alg:mv_fem}
+we calculate the matrix-vector product of the stiffness matrix and a vector. Algorithms for this
+follow easily from the ICRS data structure. We implemented this like \cite[Algorithm~4.4]{biss04}, with
+a slight alteration to cope with symmetric matrices.
+
+\subsubsection{Indexing}
+In Alg~\ref{alg_mv_fem} we have to communicate values corresponding to a shared vertex. Here we have an indexing problem, as each (shared) processor has a different index for the vertex. We solve this by using the orginal, or \emph{global} index. This is the index of the vertex in the initial triangulation. Each processor uses \verb=mpi_send= with the global index as tag to send the value to the other processors. Furthermore, each processor gets an array \verb=global2local= in the init stage that converts a global vertex index to a local one.
+
+
+In superstep (1) of Alg~\ref{alg:mv_fem} we do not have to communicate $(u_s)_i$ values if $\Pi(i) = s$. To do this efficiently we have chosen to first store the shared vertices and then stored the vertices for which we have $\Pi(i)=s$. As processor s is the only processor we do not need to store the entire processor set.
 
 \subsection{Numerical results}
 We chose to run our implementation on a few regular polygons with sides $k \in \{3, \ldots, 8\}$, creating initial triangulations with $k$ triangles (put a vertex in the middle and connect each edge with this vertex to create a triangle). We then made $n$ uniform refinements for $n \in \{1, \ldots, 7\}$, each time quadrupling the amount of triangles in the triangulation. This yielded a vast amount of test data with $D$ between 6 and 48768. On each of these triangulations, we used $p \in \{1, 2, 4, \ldots, 64\}$.
@@ -412,26 +560,27 @@ Algorithm~\ref{alg:pcg} shows CG with implicit preconditioning. \cite[Lect.~10]{
 \begin{algorithm}
   \caption{CG with implicit preconditioning \cite[Lect.~10]{sleij}}
   \label{alg:pcg}
-  \begin{algorithmic}
-    \State $\rho \gets 1$;
-    \While{asdf}
-      \State $c \gets P^{-1} r$; \Comment{Solve $Pc = r$ for c}
-      \State $\rho_{old} \gets \rho$;
-      \State $\rho \gets \langle c, r \rangle$;
-      \State
-      \If{$k > 0$}
-        \State $\beta \gets \rho/\rho_{old}$;
-        \State $u \gets \beta u$;
-      \EndIf
-      \State
-      \State $u \gets c + u$;
-      \State $w \gets Au$;
-      \State $\gamma \gets \langle u, w \rangle$;
-      \State $\alpha \gets \rho/\gamma$;
-      \State $r \gets r - \alpha w$;
-      \State $x \gets x + \alpha u$;
-    \EndWhile
-  \end{algorithmic}
+	\SetKw{KwStep}{step}
+	\SetKwInOut{Input}{Input}  
+	\SetKwInOut{Output}{Outout}
+    $\rho \gets 1$;
+		\While{asdf} {
+ \tcc{Solve $Pc = r$ for c}
+       $c \gets P^{-1} r$\;
+       $\rho_{old} \gets \rho$\;
+       $\rho \gets \langle c, r \rangle$\;
+      
+			 \uIf{$k > 0$} {
+         $\beta \gets \rho/\rho_{old}$\;
+         $u \gets \beta u$\;
+			}
+       $u \gets c + u$\;
+       $w \gets Au$\;
+       $\gamma \gets \langle u, w \rangle$\;
+       $\alpha \gets \rho/\gamma$\;
+       $r \gets r - \alpha w$\;
+       $x \gets x + \alpha u$\;
+		 }
 \end{algorithm}
 
 \subsection{Choice of preconditioner}
