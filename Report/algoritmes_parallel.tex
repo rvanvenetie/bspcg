@@ -1,0 +1,130 @@
+%%This is a very basic article template.
+%%There is just one section and two subsections.
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{bm}
+\usepackage{subcaption}
+\usepackage[noline,ruled]{algorithm2e}
+\usepackage{geometry}
+\geometry{
+  margin=3cm
+}
+\begin{document}
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\Input{$x,y : $ vector of length $D$,
+	     $\Pi_{\text{owner}} : \{0, \dots, D-1\} \to P$,
+			 $\text{distr}(x) = \text{distr}(y) = \Pi_{\text{owner}}.$}
+\KwOut{$a  := \langle x, y\rangle$}
+\nlset{(0)}
+  $a_s := 0$\;
+	\For{$ i: 0 \leq i < D \wedge \Pi_{\text{owner}}(i) = s$} {
+	  $a_s := a_s + x_i y_i$\;
+	}
+\nlset{(1)}
+  \For{$ t: 0 \leq t < p$} {
+		put $a_s$ in $P(t)$\;
+	}
+\nlset{(2)}
+  $a := 0$\;
+  \For{$ t: 0 \leq t < p$} {
+		$a := a + a_t$\;
+	}
+ \caption{Inner product for vectors in FEM-system for $P(s)$}
+ \label{alg:ip_fem}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\Input{$A^s: $ sparse (local) FEM-matrix for $P(s)$, such that
+	     $A = \sum_{t=0}^{p-1} A^t$, \\
+       $\Pi : \{0, \dots, D-1\} \to 2^p$, \\
+			 $v : $ vector of length $D$, $\text{distr}(v) = \Pi$.}
+\KwOut{$u : Av$, $\text{distr}(u) = \Pi$}
+	\nlset{(0)}
+	Local sparse symmetrical matrix-vector $u_s = A^s v$\;
+
+	\nlset{(1)}
+	\For{$ i : 0 \leq i < D \wedge s \in \Pi(i)$} {
+		\For{$t \in \Pi(i)$} {
+			put $(u_s)_i$ in $P(t)$\;
+		}
+	}
+  
+  \nlset{(2)}
+	\For{$ i : 0 \leq i < D \wedge s \in \Pi(i)$} {
+		$u_i := 0$\;
+		\For{$t \in \Pi(i)$} {
+			$u_i := u_i + (u_t)_i$\;
+		}
+	}
+ \caption{Matrix-vector product for a FEM-system for $P(s)$}
+ \label{alg:mv_fem}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\SetKwInOut{Output}{Outout}
+\Input{$X :$ list of $n$ vertices, with first $D$ vertices corresponding to a DOF, \\
+	     $T : $ list of $N$ triangles, $\text{distr}(T) = \psi$.}
+\Output{$\Pi:$ proccesor set for each DOF, \\
+	     $\Pi_{\text{owner}}:$ the `owner' of a DOF, \\
+			 $A^s: $ local sparse FEM-matrix for $P(s)$, \\
+			 $b : $ vector of length $D$, $\text{distr}(b) = \Pi$.}
+  \nlset{(0)}
+	\uIf{$ s = 0$} {
+		Use $\phi$ to calculate $\Pi$, the processor set for each DOF\; 
+		Put the local amount of DOF, vertices and triangles in each processor\;
+	}
+  \nlset{(1)}
+	Allocate memory for the (local) FEM data\;
+	\nlset{(2)}
+	\uIf{$ s= 0$} {
+		\For{$i : 0 \leq i < N$} {
+			put $T(i)$ in $P(\psi(i))$\;
+			put vertices of $T(i)$ in $P(\psi(i))$ \tcc*[h]{Avoid duplicates in implementation}
+		}
+	}
+  \nlset{(3)}
+	Calculate local FEM-matrix $A^s$ and local right hand side $b^s$\;
+	
+  { Produce the entire vector $b$, same method as described in Alg~\ref{alg:mv_fem} }
+	\nlset{(4)}
+	Communicate entries of $b^s$ to processor sets, see superstep $(1)$ in Alg~\ref{alg:mv_fem}\;
+	\nlset{(5)}
+	Sum the values to find $b$, see superstep $(2)$ in Alg~\ref{alg:mv_fem}\;
+ \caption{Algorithm that calculates the local FEM data.}
+ \label{alg:init_fem}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\SetKw{KwStep}{step}
+\SetKwInOut{Input}{Input}  
+\SetKwInOut{Output}{Outout}
+\Input{$D$ amount of DOF, \\
+       $T : $ list of $N$ triangles.}
+\Output{$ A : $ sparse $d\times d$ FEM-matrix , \\
+	      $ b : $ vector of length $D$ rhs of the system.}
+$b := 0\;$
+$A := 0\;$
+\For{$k : 0 \leq k < N$} {
+	Generate element matrix $A_{T_k}$ for triangle $T_k$\;
+	Update $b$ with $A_{T_k}$\;
+	\For{$li,lj: 0 < li < 3 \wedge 0 < lj < 3$} {
+		Calculate global index of $li$ and $lj$ in $i,j$\;
+		\uIf{$i < D \wedge j < D$}
+		{
+			$A_{ij} := A_{i,j} + (A_{T_k})_{li,lj}$\;
+		}
+	}
+}
+ \caption{Calculate the FEM-matrix.}
+ \label{alg:init_fem}
+\end{algorithm}
+\end{document}
