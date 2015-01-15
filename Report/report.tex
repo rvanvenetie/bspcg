@@ -2,6 +2,7 @@
 
 \usepackage{geometry}
 \usepackage{showlabels}
+\usepackage{caption}
 \usepackage{multirow}
 \usepackage{hyperref}
 \usepackage{algpseudocode}
@@ -41,17 +42,39 @@
 
 
 
+\title{}
+\author{}
 \begin{document}
 
-\title{Parallel Conjugate Gradients on sparse stiffness matrices}
-\author{Raymond van Veneti\"e \and Jan Westerdiep}
-\maketitle
+\begin{titlepage}
+  \begin{center}
+    {\Huge \textsc{Parallel Conjugate Gradients \\\Large{applied to sparse stiffness matrices}}}
+
+  \vfill
+  \textsc{Raymond van Veneti\"e \and Jan Westerdiep}\\
+  \vfill
+  \today
+  \vfill
+  \begin{figure}[h!]
+  \includegraphics[width=0.45\linewidth]{poly5_6-16.png}
+  \includegraphics[width=0.45\linewidth]{poly5_6-64.png}
+  \label{fig:mooi}
+\end{figure}
 \begin{figure}[h!]
 	\center
-  \includegraphics[scale=0.5]{Ray_surf.jpg}
-   \caption{Happy, because I'm next to cartesius}
+  \includegraphics[width=\linewidth]{voorkantjuh.png}
+   \caption*{Happy, because we're next to Cartesius}
 \end{figure}
+\vfill
+  \end{center}
+\end{titlepage}
 
+\begin{abstract}
+  In this report, we will be concerned with solving $Ax=b$ for symmetric positive-definite $A$, with known $A$ and $b$. We will look at a parallel implementation of the Conjugate Gradient method, and apply this to sparse matrices in the sense that a lot of the elements are zero. This makes it possible to skip parts of the matrix-vector products one encounters. First, we will give our solution to Exercise~4.6 from \cite{biss04} by specifying a general-purpose parallel sparse CG implementation. We will improve on this to create a parallel sparse CG implementation for Finite Element matrices, given the extra knowledge that the matrix is not random, but has geometric meaning. We will conclude with a system of real-life size and compare the two methods.
+\end{abstract}
+\maketitle
+\tableofcontents
+\clearpage
 \section{Introduction}
 \begin{quote}
 ``The conjugate gradient method (CG) is an algorithm for the numerical solutions of particular systems of linear equations, namely those whose matrix is symmetric and positive definite. The conjugate gradient method is often implemented as an iterative algorithm, applicable to sparse systems that are too large to be handled by a direct implementation or other direct methods such as the Cholesky decomposition. Large sparse systems often arise when numerically solving partial differential equations or optimization problems." \cite{wiki:cg}
@@ -61,13 +84,7 @@
 ``The finite element method (FEM) is a numerical technique for finding approximate solutions to boundary value problems for partial differential equations. It uses subdivision of a whole problem domain into simpler parts, called finite elements, and variational methods from the calculus of variations to solve the problem by minimizing an associated error function. Analogous to the idea that connecting many tiny straight lines can approximate a larger circle, FEM encompasses methods for connecting many simple element equations over many small subdomains, named finite elements, to approximate a more complex equation over a larger domain." \cite{wiki:fem}
 \end{quote}
 
-We will be concerned with solving
-\[
-  Ax = b
-\]
-with known $A$ and $b$.
-
-In this report, we will look at a parallel implementation of the conjuate gradient method. We will solve linear systems coming from the finite element method. Systems like this are sparse in the sense that a lot of the elements will be zero. This makes it possible to skip parts of the matrix-vector products one encounters.
+iets over waarom fem matrices
 
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS \cite{blas} routines.
@@ -530,8 +547,47 @@ One thing that is also unsurprising but very nice to see, is that $t_i/t_c$ is n
 
 The most obvious result is that our systems are still way too small to profit from concurrency. Communication time still greatly overshadows computation time, even with the largest system we were able to create (the tool used to create FEM systems is not part of this project and was not designed for efficiency; it works with dense matrices and quickly fills up memory when called on anything larger than $25000$ degrees of freedom). In real-life applications, where systems are orders of magnitude larger, computation time is more important.
 
+\subsection{Numerical results}
+Initially, we had created a very large set with test triangulations to run our implementation on.\footnote{\emph{From the original report.} We chose to run our implementation on a few regular polygons with sides $k \in \{3, \ldots, 8\}$, creating initial triangulations with $k$ triangles (put a vertex in the middle and connect each edge with this vertex to create a triangle). We then made $n$ uniform refinements for $n \in \{1, \ldots, 7\}$, each time quadrupling the amount of triangles in the triangulation. This yielded a vast amount of test data with $D$ between 6 and 48768. On each of these triangulations, we used $p \in \{1, 2, 4, \ldots, 64\}$.} After our session on the second to last day, Raymond went home to fix some existing bugs in the code, enabling us to scale up even bigger. The final test run is therefore not on a large amount of small systems, but rather on one system of real-life proportions.
+
+First, we will look at the total iteration time as a function of $n$ (number of refinements), for different processor counts. See Figure~\ref{fig:times}, and an illustration of the domain partitions for $n=6$ in Figure~\ref{fig:mooi}. We see that for small systems ($n < 5$), parallellization is of no use. There is a distinct moment where parallellization on a shared-memory systems starts to make sense -- between $n=5$ and $n=6$. This is the moment where computation time is sufficient to computer the overhead of communication. For non-shared memory systems, this moment is less defined but still visible, as $p=32,64$ are tied with sequential around $n=7$, but come out ahead from there. We see that starting from $n=10$, $p=64$ is actually faster than $p=16$, indicating that non-shared wins over shared-memory systems from here. The beauty is that these points actually hold for both the FEM algorithm and the CG algorithm.
+\begin{figure}
+  \includegraphics[width=0.8\linewidth]{times_fem.pdf}
+  \includegraphics[width=0.8\linewidth]{times_cg.pdf}
+  \caption{We see that parallellization does not make sense for systems that are too small.}
+  \label{fig:times}
+\end{figure}
+
+Let's look at a small system where parallellization is of no use. We take $n=5$, and leave out $p=32,64$ as these are orders of magnitude slower. See Figure~\ref{fig:barchart_oud}. Something that is immediately clear, is that $t_{ip}$ increases exponentially in $p$ while $t_{mv}$ and $t_{init}$ change in a much less defined manner. This is because of the small computation time and the large $h$-relation of the inner product.
+\begin{figure}
+  \includegraphics[width=0.48\linewidth]{barchart_oud_fem.pdf}
+  \includegraphics[width=0.48\linewidth]{barchart_oud_cg.pdf}
+  \caption{Comparison between timing results of the different algorithms. Left: FEM algorithm; right: CG algorithm.}
+  \label{fig:times}
+\end{figure}
+
+We created a regular 5-polygon and made 10 uniform refinements, yielding 2.6M vertices and 5.2M triangles.\footnote{In fact, we even created a regular 8-polygon with 11 uniform refinements (which is 1.2G of mesh data alone), but for this system, we were unable to create a FEM matrix so no comparison with the original CG was possible.} Running this requires $k=4352$ iterations. We will discuss Figure~\ref{fig:baazen}. One thing we see is that in both algorithms, 
+\begin{itemize}
+  \item[-] $t_{init}$ seems more or less invariant under the processor count; 
+  \item[-] $t_{mv}$ is the most substantial step;
+  \item[-] $t_{ip}$ decreases in $p$ for $p < 24$ and increases there-after;
+  \item[-] $t_{ip}$ is more or less the same for both algorithms;
+  \item[-] If we were to look at higher processor counts, $t_{ip}$ will get the overhand (we already saw this happening far earlier with smaller systems).
+\end{itemize}
+The main difference is the fact that $t_{mv}$ is a factor 4 faster in the new case versus the old case.\footnote{This has to do with the fact that the two matrix-vector algorithms are different: (1) we exploit the geometrical information of the FEM system, thereby needing less communication and not needing the fanout superstep, (2) the matrix-vector product is now symmetric, avoiding cache misses.} If we look at disk storage, the new algorithm requires around a factor 6 less storage space (saving meshes versus systems).
+
+\begin{figure}
+  \includegraphics[width=0.48\linewidth]{baazen_fem.pdf}
+  \includegraphics[width=0.48\linewidth]{baazen_cg.pdf}
+  \caption{Taking a regular 5-polygon with 10 uniform refinements (for a total of $N = 5.2$M triangles and $D = 2.6$M degrees of freedom). Left: timing results for our FEM implementation. Right: original CG implementation.}
+  \label{fig:baazen}
+\end{figure}
+
 \section{Conclusion}
 FEM systemen zijn veel beter om mee te testen dan random matrices
+
+\section{Discussion}
+geen random matrices gebruiken; grote systemen, misschien van matrixmarket halen of de onze jatten
 
 \section{Future work}
 figure out how to improve $t_{ip}$
