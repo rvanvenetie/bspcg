@@ -24,7 +24,7 @@ void  hack_fem_mat() {
 	fprintf(output_rhs, "%d\n", hack.dof);
 	int cntr = 1;
 	for (int i = 0; i < hack.dof; i++)
-		fprintf(output_rhs, "%d %lf\n", cntr++, hack.rhs[i]);
+		fprintf(output_rhs, "%d %lg\n", cntr++, hack.rhs[i]);
 }
 
 void bspexportmat() {
