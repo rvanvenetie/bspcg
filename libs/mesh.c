@@ -30,7 +30,7 @@ void mat2mtx( FILE *fp, matrix_s *mat) {
   fprintf( fp, "%%%%MatrixMarket matrix coordinate real symmetric\n");
   fprintf( fp, "%d %d %d\n", mat->n, mat->m, mat->nz);
   for( int i = 0; i < mat->nz; i++) {
-    fprintf( fp, "%d %d %g\n", mat->I[i]+1, mat->J[i]+1, mat->val[i]);
+    fprintf( fp, "%d %d %lg\n", mat->I[i]+1, mat->J[i]+1, mat->val[i]);
   }
 }
 
@@ -74,7 +74,7 @@ int write2meshfile( FILE *fp, mesh_dist *mesh, int distributed) {
   fprintf( fp, "\n");
 
   for( int i = 0; i < mesh->n_vert; i++) {
-    fprintf( fp, "%g %g %d\n", mesh->x[i], mesh->y[i], mesh->b[i]);
+    fprintf( fp, "%lg %lg %d\n", mesh->x[i], mesh->y[i], mesh->b[i]);
   }
   for( int i = 0; i < mesh->n_tri; i++) {
     fprintf( fp, "%d %d %d", mesh->t[i][0], mesh->t[i][1], mesh->t[i][2]);
