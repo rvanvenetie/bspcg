@@ -583,17 +583,30 @@ The main difference is the fact that $t_{mv}$ is a factor 4 faster in the new ca
 
 \section{Conclusion}
 In this report we have developed two parallel CG algorithms for solving $Ax =b$, with $A$ a sspd matrix. The first algorithm works by defining a distribution for the non-zeros of $A$. We then use \verb=bspmv= and a slightly altered version of \verb=bspip= to create a parallel CG implementation. This version distributes the elements $A_{ij}$ and therefore works for any sspd matrix.
+We have tested this method for a set of random generated matrices. Unfortunately, our method of matrix generation had some deficiencies. The matrices it produces are almost diagonal, which resulted in distorted timing results: the CG method converges really quick, we do not benefit from parallelizing.
 
-We have tested this method with random generated matrices. 
-In this project we have given two parallel cg al
-FEM systemen zijn veel beter om mee te testen dan random matrices
+In the second part we looked at a specific class of sppd matrices, namely the stiffness matrices comming from FEM systems. After creating such a method we can use the parallel CG method from the first part to solve the FEM-system $Ax = b$. This works by creating the stifness matrix $A$ and then using Mondriaan to find a distribution for the non-zero elements.
+
+As we are looking at FEM-matrices we have additional informatio available about the matrix $A$. We can use the fact that the matrix is related to a triangulation of the domain. If we distribute the triangles of this trianuglation over the processors, we are able to give another way of calculating the matrix-vector $u = Av$ and the inner product $\langle u, v \rangle$.  This approach  is different from traditional methods, in the sense that multiple processors will have to maintain a copy of certain data. 
+
+We can use our triangle distribution and the according matrix/vector-operations for implementing parallel CG. Using a distribution given by Mondriaan we have tested and compared both methods. We saw that small FEM-system do not benefit from parallelizing. Once the systems become large however, we saw a vast speed-up in both methods when comparing sequential with the parallel version. Also, the parallel FEM cg method presented in the second part was about $2$ to $3$ times faster than the initial parallel  CG method.
+
+EM systemen zijn veel beter om mee te testen dan random matrices
 
 \section{Discussion}
+Initially we worked out exercise $4.6$ from \cite{biss04}. We gathered a lot of results for different densities, n and processors. After processing these results we came to the conclusion that most of this data was not representative for the actual performance of the parallel CG algorithm. This comes from the fact that the matrices created are \emph{really} strictly diagonally dominant, in other words, they are almost diagonal matrices. This causes CG to converge in a low amount of iterations, which results in a really small speed-up from parallelizing.
+A suggestion for the exercise might be to gather matrices from the matrix-market or using our FEM-matrices.
+
+We wanted to work on FEM-matrices, as we have both done something with FEM in the past of our academic carreer\footnote{We actually got to use this method and our previous work, see bibliography}. Clearly, these matrices provide better input for testing the parallel CG. Comparing the second method with the first method, we actually saw a nice speed-up. Again, we generated a lot of data for several triangulations and its uniform refinements. When processing the data, we again did not see a big speed-up in parallelizing. When writing the report we came to the conclusion that the systems we tested were too small. So last-minute we generated some enourmous triangulations and recreated all the timings. Here we finally saw the speed-up of parallelizing.
+
+
+Initially the plan was to work out exercise $4.6$ from \cite{biss04}. 
 geen random matrices gebruiken; grote systemen, misschien van matrixmarket halen of de onze jatten
 
 \section{Future work}
-figure out how to improve $t_{ip}$
-use larger systems
+During the project we came up with a lot of interesting stuff we could have figured out. Here we have a summary of things we could improve our work with.
+\subsection{Inner product}
+For large systems we saw that the time spent in mv reduces when using more processors, whilst the time spent in the inner product actually improves. We want to figure out if we could possibly improve the time of the inner product. An example would be demanding other properties from the triangle distribution. 
 \subsection{Preconditioned CG}
 The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
 \[
@@ -650,9 +663,14 @@ The beauty of this preconditioner is the fact that its sparsity pattern is just 
 
 A more advanced preconditioner that is often used in the symmetric positive definite case is Incomplete Cholesky.  The Cholesky factorization of a positive definite matrix $A$ is $A = LL^*$ with $L$ a lower triangular matrix. An incomplete Cholesky factorization is any sparse lower triangular $K$ that is in some sense close to $L$. One such $K$ can be found by finding the exact Cholesky decomposition, except that any entry is set to zero if the corresponding entry in $A$ is also zero. \cite[\S11.5.8]{golub}
 \subsection{Adaptive FEM}
-\subsection{PaToH ipv Mondriaan}
-
-
+Another interesting aspect one could look at is adaptive FEM.
+Popularly speaking, adaptive FEM aims to improve the quality of the FEM-solution $u_V$ by locally refining the triangulation. This implies that only a part of the stiffness matrix will have to be recalculated. A few interesting things to look at would be.
+\begin{itemize}
+	\item Ensure each processor autonomously refines its own part of the triangulation.
+	\item Make a load imblanace treshold that rebalances the entire triangulation after a few local refinements.
+\end{itemize}
+\subsection{Triangle distributions}
+As described before, Mondriaan does not implement all the properties we want to use when partitioning a hypergraph. For better control of the triangle distributions one could look at other partitioners, for example PaToH.
 \bibliographystyle{alpha}
 \bibliography{report}
 
