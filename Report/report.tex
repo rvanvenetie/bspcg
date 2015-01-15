@@ -497,19 +497,26 @@ The triangle distribution $\psi$ determines the cost of the operations described
   \item $|\Pi(i)| > 1$. Interactions of $\phi_i$ are stored on different processors. To compute $(Au)_i$, we need to communicate with $|\Pi(i)|-1$ processors. This corresponds with vertices $x_1, x_2$ in Figure~\ref{fig:procset}.
 \end{enumerate}
 
-
-Here we see the second advantage of this approach. By distributing triangles, we can balance computation and communication cost of a matrix-vector multiplication. We chose to use Mondriaan, using \cite{bissmondriaan,biss2012}. First, we create some triangulation (e.g., using \cite{TODOJAN}) and save this to disk for later retrieval. We then transform this into a \emph{hypergraph} $H = (V,E)$ -- a generalization of a graph in which any number of hypervertices can be connected by hyperedges or \emph{nets}. This is done as follows:
+Here we see another advantage of our FEM-approach. By distributing triangles, we can balance computation and communication cost of a matrix-vector multiplication. We chose to use Mondriaan, using \cite{bissmondriaan,biss2012}. We transform a given triangulation into a \emph{hypergraph} $H = (V,E)$ -- a generalization of a graph in which any number of hypervertices can be connected by hyperedges or \emph{nets}. This is done as follows:
 \begin{itemize}
   \item[-] Every triangle $T_n$ in our triangulation is identified with a hypervertex $v_n \in V$;
-  \item[-] Every vertex $x_i$ connecting triangles $\{T_{n_0}, \ldots, T_{n_k}\}$ is identified with a net $e_i \in E$ connecting hypervertices $\{v_{n_0}, \ldots, v_{n_k}\}$.
+	\item[-] Every vertex $x_i$ connecting triangles $\{T_{n_0}, \ldots, T_{n_k}\}$ is identified with a net (hyperedge) $e_i \in E$ connecting hypervertices $\{v_{n_0}, \ldots, v_{n_k}\}$.
   \item[-] Every hypervertex $v_n \in V$ is given a \emph{vertex weight}, measuring the computational cost corresponding with triangle $T_n$. In our case, one needs to compute the same quantities for every triangle.\footnote{In more advanced Finite Element methods where the polynomial degree is different for each triangle, this would scale with the polynomial degree.} We set this to 1;
   \item[-] Every net $e_i\in V$ is given a \emph{net weight}. Mondriaan does not implement this, but to be future-proof, we set this to 1 for all vertices $v_i$ not on the boundary and 0 for boundary vertices. This reflects the fact that boundary vertices have no degree of freedom attached to it.
 \end{itemize}
-Mondriaan then aims to balance communication and computation cost between processors by creating a distribution of the hypervertices. It requires setting the amount of processors $p$ and a load imbalance factor $\epsilon$ which we set to $0.1$.
+Mondriaan will then find a partitioning of the vertices over the processors, such that the total communication volume is minimized while balancing the computation cost. Remember that vertices in the hypergraph correspond to triangles in triangulation. This implies that Mondriaan gives us a triangle distribution with the following properties:
+\begin{align*}
+	\text{Comm}&= \sum_{i=0}^{D-1} |\Pi(i)| (|\Pi(i)| -1 ) \\
+	|T^q| & \leq (1 + \epsilon) \frac{|T|}{p} \quad 0 \leq q < p
+\end{align*}
 
+One intuitively sees that this minimizes the total communication while balancing the computation cost of the matrix-vector product. Unfortunately we were not able to derive an explicit BSP cost estimation for algorithm, as the amount of triangles per processor is not directly related to the amount of computation needed in the processing step. We are not entirely sure whether the distribution Mondriaan creates actually satisfies these constraints as it lacks some features in hypergraph partitioning. One could resolve this by using a different partitioner, see Section \ref{sec:future}.
+
+In our implementations we chose $\epsilon 0.1$, as this seems to generate reasonable distributions. An example of a distributions is given by the cover image. This represents the triangle distribution of a triangulation for the  regular 5-polygon. The different colors indicate parts of the triangulation that are owned by different processors. The triangulation on the left is divided among 16 processors, the right one among 64 processors. 
 \subsection{Implementation details}
-\subsubsection{FEM Matrix}
-Alg~\ref{alg:calc_fem} gives an algorithm to assemble the FEM Matrix. Here
+The algorithms presented so far as mostly given in pseudo-code. Here we want to hightlight a few implementation details that might be oversimplyfied in pseudo-code.
+\subsection*{FEM Matrix}
+Algorithm~\ref{alg:calc_fem} gives way to assemble the FEM Matrix. Here
 we assumed to have a method for inserting or adding nonzeros at abritrare positions in the matrix. However,
 this is not easily done in most data structures for sparse matrices as we do not know the
 indices holding a non-zero beforehand. We adapt the following strategy, we first create a list
@@ -524,13 +531,13 @@ we calculate the matrix-vector product of the stiffness matrix and a vector. Alg
 follow easily from the ICRS data structure. We implemented this like \cite[Algorithm~4.4]{biss04}, with
 a slight alteration to cope with symmetric matrices.
 
-\subsubsection{Indexing}
+\subsection*{Indexing}
 In Alg~\ref{alg_mv_fem} we have to communicate values corresponding to a shared vertex. Here we have an indexing problem, as each (shared) processor has a different index for the vertex. We solve this by using the orginal, or \emph{global} index. This is the index of the vertex in the initial triangulation. Each processor uses \verb=mpi_send= with the global index as tag to send the value to the other processors. Furthermore, each processor gets an array \verb=global2local= in the init stage that converts a global vertex index to a local one.
 
 
 In superstep (1) of Alg~\ref{alg:mv_fem} we do not have to communicate $(u_s)_i$ values if $\Pi(i) = s$. To do this efficiently we have chosen to first store the shared vertices and then stored the vertices for which we have $\Pi(i)=s$. As processor s is the only processor we do not need to store the entire processor set.
-
-\subsection{Numerical results}
+First, we create some triangulation (e.g., using \cite{TODOJAN}) and save this to disk for later retrieval. 
+\section{Numerical results}
 We chose to run our implementation on a few regular polygons with sides $k \in \{3, \ldots, 8\}$, creating initial triangulations with $k$ triangles (put a vertex in the middle and connect each edge with this vertex to create a triangle). We then made $n$ uniform refinements for $n \in \{1, \ldots, 7\}$, each time quadrupling the amount of triangles in the triangulation. This yielded a vast amount of test data with $D$ between 6 and 48768. On each of these triangulations, we used $p \in \{1, 2, 4, \ldots, 64\}$.
 
 To compare our new algorithm with the original parallel CG implementation, we further created a script that creates the stiffness matrix and right-hand side, and writes them to file. As our original implementation allows for loading right-hand sides from file, we were able to plug-and-play. Loading the 8-polygon with 6 uniform refinements yields Figure~\ref{fig:poly8}.
