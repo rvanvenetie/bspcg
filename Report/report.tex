@@ -55,12 +55,12 @@
   \vfill
   \today
   \vfill
-  \begin{figure}[h!]
+  \begin{figure}
   \includegraphics[width=0.45\linewidth]{poly8_6-16.png}
   \includegraphics[width=0.45\linewidth]{poly5_6-64.png}
   \label{fig:mooi}
 \end{figure}
-\begin{figure}[h!]
+\begin{figure}
 	\center
   \includegraphics[width=\linewidth]{voorkantjuh.png}
    \caption*{Happy, because we're next to Cartesius}
@@ -74,6 +74,7 @@
 \end{abstract}
 %\maketitle
 \tableofcontents
+\vspace{-2em}
 \hrulefill
 \section{Introduction}
 \begin{quote}
@@ -91,10 +92,10 @@ In \S6 we will narrow our class of sspd matrices to matrices found in the (conti
 
 In \S7 we will test both our methods on a set of FEM-matrices. What method performs better? When does the CG method benefit from parallelizing, and how large does our system need to be?
 
-We will provide thoughts for future work in \S10.
+We will provide thoughts for future work in \S10. All our code is open-source and available at \url{http://github.com/rvanvenetie/bspcg}.
 
 \section{CG}
-In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS \cite{blas} routines.
+In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS routines. \cite{blas} 
 
 \begin{algorithm}[H]
 \caption{Sequential CG}
@@ -131,14 +132,13 @@ In its most basic (sequential, non-preconditioned) form, CG can be written down 
 	 }
 \end{algorithm}
 
-\subsection{Sparse CG}
-As most real-life matrices are sparse in nature, we will adapt Algorithm~\ref{alg:seqcg} to a version that supports sparse matrices. We will assume the right-hand side to be dense. This allows us to effectively only change I/O and the function responsible for matrix-vector multiplication.
+\subsection{Sequential sparse CG}
+As most real-life matrices are sparse in nature, we will adapt Algorithm~\ref{alg:seqcg} to a version that supports sparse matrices. We will assume the right-hand side to be dense. This allows us to effectively only change the function responsible for matrix-vector multiplication.
 
 Our storage format uses the so-called coordinate scheme; we store tuples $(i, j, a_{ij})$ with $i$ the row number, $j$ the column number and $a_{ij}$ the matrix value at this position. The Matrix Market file format adds some headers, e.g. to denounce symmetry so that one only has to store the lower triangular part. We denote by $nz(A)$ the amount of nonzero elements in this lower triangular part. If we store the list of tuples in three lists of length $nz(A)$, namely $I$, $J$ and $v$, we can compute a sequential sparse matrix-vector multiplication using e.g.~\cite[Alg.~4.3]{biss04}.
-
 \section{Parallellizing CG}
 \label{sec:parcg}
-With our sequential algorithm in hand, we are now ready to parallelize the Conjugate Gradient method. Given the spd matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
+With our sequential algorithm in hand, we are now ready to parallelize the Conjugate Gradient method using \texttt{bspmv} and \texttt{bspip}. Given the spd matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
 
 Every iteration of Algorithm~\ref{alg:seqcg} has 5 vector updates, two inner products and one matrix-vector multiplication. Finding good distributions of $A$, $x$ and $b$ is an NP-hard problem so we will have to resort to heuristic methods. To find these edistributions, we can use Mondriaan.\footnote{Mondriaan is a sequential program written in C that can be used to partition a rectangular sparse matrix, an input vector, and an output vector for parallel sparse matrix-vector multiplication. The program is based on a recursive bipartitioning algorithm that cuts the matrix horizontally and vertically, in a manner resembling some of the famous Mondriaan paintings. The algorithm is multilevel, hypergraph-based, and two-dimensional. It reduces the amount of communication and it spreads both computation and communication evenly over the processors. The program can partition hypergraphs with integer vertex weights and uniform hyperedge costs, but it is primarily intended as a matrix partitioner. \cite{mondriaan}} With its option \texttt{-SquareMatrix\_DistributeVectorsEqual=yes} we can force input and output vector to have the same distribution. We chose not to alter the default load imbalance option of $\epsilon = 0.03$.\footnote{Later inspection using the formula provided in \cite[p.~189]{biss04} -- $\epsilon = Vg/(2nz(A))$ being optimal for the matrix-vector product -- revealed that the optimal value (which of course depends on $p$ and $A$) lies around $0.2$. The total iteration time was however not that much faster, so we opted not to rerun everything.}
 
@@ -198,7 +198,7 @@ We found the average value of $\bar r = 9157$ Mflop/s. See Figure~\ref{fig:cart}
 \section{Testing our parallel CG}
 To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in \cite[Ex.~4.6]{biss04}: create a random sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is spd, we opted for a slightly easier approach. 
 
-We need to compute a \emph{symmetric} matrix, so we only have to look at the lower triangular part of this matrix. First we create a random sparse strictly lower triangular matrix $B$. We do this by specifying some density $\delta$ and placing a random number in $[-1,1]$ on position $(i,j)$ with probability $\delta$. The matrix must be positive definite, which is achieved \cite[Ex.~24.2]{trefbau} if
+We need to compute a \emph{symmetric} matrix, so we only have to look at the lower triangular part of this matrix. First we create a random sparse strictly lower triangular matrix $B$. We do this by specifying some density $\delta$ and placing a random number in $[-1,1]$ on position $(i,j)$ with probability $\delta$. The matrix must be positive definite, which is achieved (\cite[Ex.~24.2]{trefbau}) if
 \[
   |A_{ii}| > \sum_{j=1, j\ne i}^n |A_{ij}|= \sum_{j=1}^{i-1} (|B_{ij}| + |B_{ji}|).
 \]
@@ -251,7 +251,7 @@ The fact that functions in $V$ are zero on the boundary implies that $\dim(V) = 
 \[
   \phi_i( x_j) = \delta_{ij} \quad \forall~~0 \leq i < D,\, 0 \leq j < N.
 \] An example of such a basis function is given in Figure~\ref{fig:nodal}. Note that every basis function $\phi_i$ directly corresponds to a vertex not lying on the boundary. This allows us to identify vertices with basis functis: every degree of freedom is coupled to a vertex inside the domain.
-\begin{figure}[h!]
+\begin{figure}
 	\centering
 	\includegraphics[width=0.5\linewidth]{nodal_vijfhoek.eps}
 \caption{Example of a basis function for a pentagon}
@@ -262,12 +262,12 @@ The crux of the Finite Element method is that we can actually find the projectio
 \[
   u_V = \sum_{i=0}^{D-1} \alpha_i \phi_i.
 \]
-Then, $u_V$ can be proven \cite[p.~19]{rayscriptie} to be the solution to the system
+Then, $u_V$ can be proven (\cite[p.~19]{rayscriptie}) to be the solution to the system
 \[
 	A\vec \alpha = b \text{ with }  A_{ij} := a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j \text{ and } b_i = \int_\Omega \phi_i.
 \]
 
-The matrix $A$ is called the \emph{stiffness matrix}, which is spd \cite[p.~42]{rayscriptie}. It is also a sparse matrix, as the basis functions only `interact' with a small number of neighbours.
+The matrix $A$ is called the \emph{stiffness matrix}, which is spd. \cite[p.~42]{rayscriptie} It is also a sparse matrix, as the basis functions only `interact' with a small number of neighbours.
 
 In the coming sections, we will look at the two steps involved in solving such a FEM-system:
 \begin{description}
@@ -289,13 +289,13 @@ In fact, this $3 \times 3$ matrix can be computed in a variety of ways. One way 
 \[
   D = \begin{bmatrix} v_{0} & v_{1} & v_{2} \end{bmatrix} \in \R^{ 2 \times 3}
 \]
-with $v_{i}$ the $i$th vertex of triangle $T$. Then one can prove \cite{wiki} that
+with $v_{i}$ the $i$th vertex of triangle $T$. Then one can prove (\cite{wiki}) that
 \[
   \hat A_T = \frac{D^\top D}{4 \cdot \text{vol}(T)}
 \]
 with $\text{vol}(T)$ the volume of triangle $T$.
 
-We can compute the right-hand side $b_i$ in much the same way. One can prove \cite[\S2.3]{janadapt} that
+We can compute the right-hand side $b_i$ in much the same way. One can prove (\cite[\S2.3]{janadapt}) that
 \[
   b_i = \int_\Omega \phi_i = \sum_{n=0}^N \int_{T_n} \phi_i
 	= \sum_{n=0}^N \mathbf{1}_{T_n}(x_i)\text{vol}(T_n)/3.
@@ -351,10 +351,10 @@ leading to the partition $\Omega = T^0 \cup \dots \cup T^{p-1}$. When distributi
 \[
   \Pi: \{0, \ldots, D-1\} \to 2^{\{0, \ldots, p-1\}}: i \mapsto \Pi(i)
 \]
-as the set of processors that contain $x_i$ in one of their triangles. Remember that every vertex was identified with a degree of freedom. As vertices might be shared with different processors, this induces a different kind of vector distrbution than the one described in \cite{biss04}: all the processors in a set must have a copy of the corresponding vector value.
+as the set of processors that contain $x_i$ in one of their triangles. Remember that every vertex was identified with a degree of freedom. As vertices might be shared with different processors, this induces a different kind of vector distrbution than the one described in \cite[Ch.~4]{biss04}: all the processors in a set must have a copy of the corresponding vector value.
 Figure~\ref{fig:procset} is an illustration of the definitions given in the previous section. 
 
-\begin{figure}[h!]
+\begin{figure}
   \includegraphics[width=0.5\linewidth]{procset.png}
   \caption{A sample mesh with its triangle distribution. Only vertices not on the boundary have been numbered. For these vertices, $\Pi(0) = \{0, 1, 2, 3\}, \Pi(1) = \{0\}, \Pi(2) = \{0, 1\}$.}
   \label{fig:procset}
@@ -432,11 +432,11 @@ Algorithm~\ref{alg:init_fem} now describes how to create $\hat A^q$ for each pro
   \nlset{(3)}
 	Calculate local FEM-matrix $\hat A^s$ and local right hand side $\hat b^s$\;
 	
-  { Produce the entire vector $b$, same method as described in Alg~\ref{alg:mv_fem} }
+  { Produce the entire vector $b$, same method as described in Alg~\ref{alg:fem_mv} }\\
 	\nlset{(4)}
-	Communicate entries of $\hat b^s$ to processor sets, see superstep $(1)$ in Alg~\ref{alg:mv_fem}\;
+	Communicate entries of $\hat b^s$ to processor sets, see superstep $(1)$ in Alg~\ref{alg:fem_mv}\;
 	\nlset{(5)}
-	Sum the values to find $b$, see superstep $(2)$ in Alg~\ref{alg:mv_fem}\;
+	Sum the values to find $b$, see superstep $(2)$ in Alg~\ref{alg:fem_mv}\;
  \caption{Algorithm that calculates the local FEM data.}
  \label{alg:init_fem}
 \end{algorithm}
@@ -513,7 +513,7 @@ of all the nonzeros to add together in the coordinate scheme $(i,j,a_{ij})$.
 This list will contain multiple elements with the same index $i,j$ when
 the basis function $i$ and $j$ interact on multiple triangles. Afterwards, we know
 exactly what indices contain a nonzero. We then convert this triple format to the \emph{ICRS}
-\cite[p.~171]{biss04} format, after which we remove the duplicate nonzero entries by summing their values.
+format (\cite[p.~171]{biss04}), after which we remove the duplicate nonzero entries by summing their values.
 
 As the matrix is symmetric we only store the lower triangular part. In Algorithm~\ref{alg:fem_mv}
 we calculate the matrix-vector product of the stiffness matrix and a vector. Algorithms for this
@@ -524,7 +524,7 @@ a slight alteration to use symmetry.
 In Alg~\ref{alg:fem_mv} we have to communicate values corresponding to a shared vertex. Here we have an indexing problem, as each (shared) processor has a different local index for the vertex. We solve this by using the orginal, or \emph{global} index. This is the index of the vertex in the initial triangulation. Each processor uses \verb=mpi_send= with the global index as tag to send the value to the other processors. Furthermore, each processor gets an array \verb=global2local= in the init stage that converts a global vertex index to a local one.
 
 
-In superstep (1) of Algorithm~\ref{alg:fem_mv}, we do not have to communicate $(u^s)_i$ values if $\Pi(i) = \{s\}$. To do this efficiently we have chosen to first store the shared vertices and then stored the vertices for which we have $\Pi(i)=\{s\}$. As processor $s$ is the only processor we do not need to store the entire processor set for this vertex.
+In superstep (1) of Algorithm~\ref{alg:fem_mv}, we do not have to communicate $(u_s)_i$ values if $\Pi(i) = \{s\}$. To do this efficiently we have chosen to first store the shared vertices and then stored the vertices for which we have $\Pi(i)=\{s\}$. As processor $s$ is the only processor we do not need to store the entire processor set for this vertex.
 
 \section{Testing the new algorithm: Numerical results}
 Initially, we had created a very large set with test triangulations to run our implementation on.\footnote{\emph{From the original report.} We chose to run our implementation on a few regular polygons with sides $k \in \{3, \ldots, 8\}$, creating initial triangulations with $k$ triangles (put a vertex in the middle and connect each edge with this vertex to create a triangle). We then made $n$ uniform refinements for $n \in \{1, \ldots, 7\}$, each time quadrupling the amount of triangles in the triangulation. This yielded a vast amount of test data with $D$ between 6 and 48768. On each of these triangulations, we used $p \in \{1, 2, 4, \ldots, 64\}$.} After our session on the second to last day, Raymond went home to fix some existing bugs in the code, enabling us to scale up even bigger. The final test run is therefore not on a large amount of small systems, but rather on one system of real-life proportions.
@@ -580,14 +580,15 @@ We can use our triangle distribution and the according matrix- and vector-operat
 Initially we worked out Exercise~4.6 from \cite{biss04}. We gathered a lot of results for different densities, $n$ and processor counts. After processing these results, we came to the conclusion that most of this data was not representative for the actual performance of the parallel CG algorithm. This comes from the fact that the matrices created are \emph{really} strictly diagonally dominant, in other words, they are almost diagonal matrices. This causes CG to converge in a low amount of iterations, which results in a really small speed-up from parallelizing.
 A suggestion for the exercise might be to gather matrices from the Matrix Market, or to use our FEM-matrices.
 
-We wanted to work on FEM-matrices, as we have both done something with FEM in the past of our academic career.\footnote{We actually got to use this method and our previous work, which is really cool. See \cite{TODOCITES}.} Clearly, these matrices provide better input for testing the parallel CG. Comparing the second method with the first method, we actually saw a nice speed-up. Again, we generated a lot of data for several triangulations and its uniform refinements. When processing the data, we again did not see a big speed-up in parallelizing. When writing the report we came to the conclusion that the systems we tested were too small. So last-minute we generated some enourmous triangulations and recreated all the timings. Here we finally saw the speed-up of parallelizing.
+We wanted to work on FEM-matrices, as we have both done something with FEM in the past of our academic career.\footnote{We actually got to use this method and our previous work, which is really cool. See \cite{rayscriptie,janadapt}.} Clearly, these matrices provide better input for testing the parallel CG. Comparing the second method with the first method, we actually saw a nice speed-up. Again, we generated a lot of data for several triangulations and its uniform refinements. When processing the data, we again did not see a big speed-up in parallelizing. When writing the report we came to the conclusion that the systems we tested were too small. So last-minute we generated some enourmous triangulations and recreated all the timings. Here we finally saw the speed-up of parallelizing.
 
 \section{Future work}
+\label{sec:future}
 During the project we came up with a lot of interesting stuff we could have figured out. Here we have a summary of things we could improve our work with.
 \subsection{Inner product}
 For large systems we saw that the time spent in matrix-vector products reduces when using more processors, whilst the time spent in the inner product actually increases. We want to figure out if we could possibly improve the time of the inner product. An example would be demanding other properties from the triangle distribution. Another idea is to combine ideas from the method proposed in \cite[Ex~1.1]{biss04} with the old method.
 \subsection{Preconditioned CG}
-The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
+The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality (\cite[Lect.~7]{sleij}):
 \[
   \frac{\|x - x_k\|_A}{\|x - x_0\|_A} \leq 2 \left( \frac{ \sqrt{\kappa_2(A)}-1}{\sqrt{\kappa_2(A)}+1}\right)^k \leq 2 \exp \left( -\frac{2k}{\sqrt{\kappa_2(A)}}\right) 
 \]
