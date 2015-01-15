@@ -131,7 +131,7 @@ Our storage format uses the so-called coordinate scheme; we store tuples $(i, j,
 
 \section{Parallellizing CG}
 \label{sec:parcg}
-With our sequential algorithm in hand, we are now ready to parallellize the Conjugate Gradient method. Given the spd matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
+With our sequential algorithm in hand, we are now ready to parallelize the Conjugate Gradient method. Given the spd matrix $A \in \R^{n \times n}$ and vector $b \in \R^n$, this requires us to find distributions for $A$, $b$ and all other vectors present in the algorithm. If we want to minimize communication cost, we desire that the distributions of $n, x, r, u, w$ are the same.\footnote{This was also pointed out in \cite[p.~174]{biss04}.} This allows us to perform all vector updates locally and makes for easy implementation of the inner product algorithm.
 
 Every iteration of Algorithm~\ref{alg:seqcg} has 5 vector updates, two inner products and one matrix-vector multiplication. Finding good distributions of $A$, $x$ and $b$ is an NP-hard problem so we will have to resort to heuristic methods. To find these edistributions, we can use Mondriaan.\footnote{Mondriaan is a sequential program written in C that can be used to partition a rectangular sparse matrix, an input vector, and an output vector for parallel sparse matrix-vector multiplication. The program is based on a recursive bipartitioning algorithm that cuts the matrix horizontally and vertically, in a manner resembling some of the famous Mondriaan paintings. The algorithm is multilevel, hypergraph-based, and two-dimensional. It reduces the amount of communication and it spreads both computation and communication evenly over the processors. The program can partition hypergraphs with integer vertex weights and uniform hyperedge costs, but it is primarily intended as a matrix partitioner. \cite{mondriaan}} With its option \texttt{-SquareMatrix\_DistributeVectorsEqual=yes} we can force input and output vector to have the same distribution. We chose not to alter the default load imbalance option of $\epsilon = 0.03$.\footnote{Later inspection using the formula provided in \cite[p.~189]{biss04} -- $\epsilon = Vg/(2nz(A))$ being optimal for the matrix-vector product -- revealed that the optimal value (which of course depends on $p$ and $A$) lies around $0.2$. The total iteration time was however not that much faster, so we opted not to rerun everything.}
 
@@ -214,7 +214,7 @@ We varied the right-hand side by either (1) setting $b := \vec 1$ (simple right-
 \subsection{Example}
 Taking $n = 4096$ and $\delta \in \{0.1, 0.2\}$, we get two sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these matrices yields Figure~\ref{fig:samples}. We see that the computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ for small systems with little computations) decreases first, then increases later. This has to do with the Cartesius hardware: see \S \ref{sec:cart}.
 
-If we look at $t_{ip}$ separately, one sees that $t_{ip}$ takes the overhand, especially in the non-shared memory case. The systems are simply too small for parallellization to be of use; the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from the first homework exercise. \cite{TODOHUISWERK} In this exercise, we found that if
+If we look at $t_{ip}$ separately, one sees that $t_{ip}$ takes the overhand, especially in the non-shared memory case. The systems are simply too small for parallelization to be of use; the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from the first homework exercise. \cite{TODOHUISWERK} In this exercise, we found that if
 \[
   (p - 5\log_2 p) + (p + \log_2 p - 1)g + (2-\log_2 p)l > 0
 \]
@@ -492,7 +492,7 @@ Mondriaan will then find a partitioning of the vertices over the processors, suc
 	|T^q| & \leq (1 + \epsilon) \frac{|T|}{p} \quad 0 \leq q < p.
 \end{align*}
 
-One intuitively sees that this minimizes the total communication while balancing the computation cost of the matrix-vector product. Unfortunately we were not able to derive an explicit BSP cost estimation for our algorithm, as the amount of triangles per processor is not directly related to the amount of computation needed in the processing step. We are not entirely sure whether the distribution Mondriaan creates actually satisfies these constraints as it lacks some features in hypergraph partitioning (such as net weights as described above). One could resolve this by using a different partitioner such as PaToH \cite{patoh}; see Section \ref{sec:future}.
+One intuitively sees that this minimizes the total communication while balancing the computation cost of the matrix-vector product. Unfortunately we were not able to derive an explicit BSP cost estimation for our algorithm, as the amount of triangles per processor is not directly related to the amount of computation needed in the processing step. We are not entirely sure whether the distribution Mondriaan creates actually satisfies these constraints as it lacks some features in hypergraph partitioning (such as net weights as described above). One could resolve this by using a different partitioner; see \S\ref{sec:future}.
 
 In our implementations we chose $\epsilon = 0.1$, as this seems to generate reasonable distributions. An example of a distributions is given by the cover image. This represents the triangle distribution of a triangulation for the  regular 8- and 5-polygon. The different colors indicate parts of the triangulation that are owned by different processors. The triangulation on the left is divided among 16 processors, the right one among 64 processors. 
 \subsection{Implementation details}
@@ -501,23 +501,23 @@ The algorithms presented so far as mostly given in pseudo-code. Here we want to 
 Algorithm~\ref{alg:calc_fem} gives way to assemble the stiffness matrix. Here
 we assumed to have a method for inserting or adding nonzeros at arbritary positions in the matrix. However,
 this is not easily done in most data structures for sparse matrices as we do not know the
-indices holding a nonzero beforehand. We adapt the following strategy, we first create a list
-of all the nonzeros to add together in the triple format $(i,j,a_{ij})$.
-This list will contain multiple elements with the same index $ij$ when
-the basis function $i$ and $j$ interact on multiple triangles. Afterwards we know
+indices holding a nonzero beforehand. We adapt the following strategy: we first create a list
+of all the nonzeros to add together in the coordinate scheme $(i,j,a_{ij})$.
+This list will contain multiple elements with the same index $i,j$ when
+the basis function $i$ and $j$ interact on multiple triangles. Afterwards, we know
 exactly what indices contain a nonzero. We then convert this triple format to the \emph{ICRS}
-\cite[p.~171]{biss04} format, summing the values for the same indices.
+\cite[p.~171]{biss04} format, after which we remove the duplicate nonzero entries by summing their values.
 
-As the matrix is symmetric we only store the lower triangular part. In Alg~\ref{alg:mv_fem}
+As the matrix is symmetric we only store the lower triangular part. In Algorithm~\ref{alg:fem_mv}
 we calculate the matrix-vector product of the stiffness matrix and a vector. Algorithms for this
-follow easily from the ICRS data structure. We implemented this like \cite[Algorithm~4.4]{biss04}, with
-a slight alteration to cope with symmetric matrices.
+follow easily from the ICRS data structure. We implemented this like \cite[Alg.~4.4]{biss04}, with
+a slight alteration to use symmetry.
 
 \subsubsection*{Indexing}
-In Alg~\ref{alg:fem_mv} we have to communicate values corresponding to a shared vertex. Here we have an indexing problem, as each (shared) processor has a different index for the vertex. We solve this by using the orginal, or \emph{global} index. This is the index of the vertex in the initial triangulation. Each processor uses \verb=mpi_send= with the global index as tag to send the value to the other processors. Furthermore, each processor gets an array \verb=global2local= in the init stage that converts a global vertex index to a local one.
+In Alg~\ref{alg:fem_mv} we have to communicate values corresponding to a shared vertex. Here we have an indexing problem, as each (shared) processor has a different local index for the vertex. We solve this by using the orginal, or \emph{global} index. This is the index of the vertex in the initial triangulation. Each processor uses \verb=mpi_send= with the global index as tag to send the value to the other processors. Furthermore, each processor gets an array \verb=global2local= in the init stage that converts a global vertex index to a local one.
 
 
-In superstep (1) of Alg~\ref{alg:mv_fem} we do not have to communicate $(u_s)_i$ values if $\Pi(i) = s$. To do this efficiently we have chosen to first store the shared vertices and then stored the vertices for which we have $\Pi(i)=s$. As processor s is the only processor we do not need to store the entire processor set.
+In superstep (1) of Algorithm~\ref{alg:fem_mv}, we do not have to communicate $(u^s)_i$ values if $\Pi(i) = \{s\}$. To do this efficiently we have chosen to first store the shared vertices and then stored the vertices for which we have $\Pi(i)=\{s\}$. As processor $s$ is the only processor we do not need to store the entire processor set for this vertex.
 
 \subsection{Numerical results}
 Initially, we had created a very large set with test triangulations to run our implementation on.\footnote{\emph{From the original report.} We chose to run our implementation on a few regular polygons with sides $k \in \{3, \ldots, 8\}$, creating initial triangulations with $k$ triangles (put a vertex in the middle and connect each edge with this vertex to create a triangle). We then made $n$ uniform refinements for $n \in \{1, \ldots, 7\}$, each time quadrupling the amount of triangles in the triangulation. This yielded a vast amount of test data with $D$ between 6 and 48768. On each of these triangulations, we used $p \in \{1, 2, 4, \ldots, 64\}$.} After our session on the second to last day, Raymond went home to fix some existing bugs in the code, enabling us to scale up even bigger. The final test run is therefore not on a large amount of small systems, but rather on one system of real-life proportions.
@@ -526,20 +526,20 @@ To compare our new algorithm with the original parallel CG implementation, we fu
 
 Firstly, we see that Mondriaan does a tremendous job balancing the triangle distribution. Another thing we see is that we achieved speedup in all cases. Moreover, $t_{mv}$ is drastically improved. Inner product time is more or less the same, and initialization time is (somewhat surprisingly) improved as well.
 
-First, we will look at the total iteration time as a function of $n$ (number of refinements), for different processor counts. See Figure~\ref{fig:times}, and an illustration of the domain partitions for $n=6$ in Figure~\ref{fig:mooi}. We see that for small systems ($n < 5$), parallellization is of no use. There is a distinct moment where parallellization on a shared-memory systems starts to make sense -- between $n=5$ and $n=6$. This is the moment where computation time is sufficient to computer the overhead of communication. For non-shared memory systems, this moment is less defined but still visible, as $p=32,64$ are tied with sequential around $n=7$, but come out ahead from there. We see that starting from $n=10$, $p=64$ is actually faster than $p=16$, indicating that non-shared wins over shared-memory systems from here. The beauty is that these points actually hold for both the FEM algorithm and the CG algorithm.
+First, we will look at the total iteration time as a function of $n$ (number of refinements), for different processor counts. See Figure~\ref{fig:times}. We see that for small systems ($n < 5$), parallelization is of no use. There is a distinct moment where parallelization on a shared-memory systems starts to make sense -- between $n=5$ and $n=6$. This is the moment where computation time is sufficient to computer the overhead of communication. For non-shared memory systems, this moment is less defined but still visible, as $p \in \{32,64\}$ are tied with sequential around $n=7$, but come out ahead from there. We see that starting from $n=10$, $p=64$ is actually faster than $p=16$, indicating that non-shared wins over shared-memory systems from here. The beauty is that these points actually hold for both the FEM algorithm and the CG algorithm.
 \begin{figure}
   \includegraphics[width=0.8\linewidth]{times_fem.pdf}
   \includegraphics[width=0.8\linewidth]{times_cg.pdf}
-  \caption{We see that parallellization does not make sense for systems that are too small.}
+  \caption{We see that parallelization does not make sense for systems that are too small.}
   \label{fig:times}
 \end{figure}
 
-Let's look at a small system where parallellization is of no use. We take $n=5$, and leave out $p=32,64$ as these are orders of magnitude slower. See Figure~\ref{fig:barchart_oud}. Something that is immediately clear, is that $t_{ip}$ increases exponentially in $p$ while $t_{mv}$ and $t_{init}$ change in a much less defined manner. This is because of the small computation time and the large $h$-relation of the inner product.
+Let's look at a small system where parallelization is of no use. We take $n=5$, and leave out $p \in \{32,64\}$ as these are orders of magnitude slower. See Figure~\ref{fig:barchart_oud}. Something that is immediately clear, is that $t_{ip}$ increases exponentially in $p$ while $t_{mv}$ and $t_{init}$ change in a much less defined manner. This is because of the small computation time and the large $h$-relation of the inner product.
 \begin{figure}
   \includegraphics[width=0.48\linewidth]{barchart_oud_fem.pdf}
   \includegraphics[width=0.48\linewidth]{barchart_oud_cg.pdf}
   \caption{Comparison between timing results of the different algorithms. Left: FEM algorithm; right: CG algorithm.}
-  \label{fig:times}
+  \label{fig:barchart_oud}
 \end{figure}
 
 We created a regular 5-polygon and made 10 uniform refinements, yielding 2.6M vertices and 5.2M triangles.\footnote{In fact, we even created a regular 8-polygon with 11 uniform refinements (which is 1.2G of mesh data alone), but for this system, we were unable to create a FEM matrix so no comparison with the original CG was possible.} Running this requires $k=4352$ iterations. We will discuss Figure~\ref{fig:baazen}. One thing we see is that in both algorithms, 
@@ -550,7 +550,7 @@ We created a regular 5-polygon and made 10 uniform refinements, yielding 2.6M ve
   \item[-] $t_{ip}$ is more or less the same for both algorithms;
   \item[-] If we were to look at higher processor counts, $t_{ip}$ will get the overhand (we already saw this happening far earlier with smaller systems).
 \end{itemize}
-The main difference is the fact that $t_{mv}$ is a factor 4 faster in the new case versus the old case.\footnote{This has to do with the fact that the two matrix-vector algorithms are different: (1) we exploit the geometrical information of the FEM system, thereby needing less communication and not needing the fanout superstep, (2) the matrix-vector product is now symmetric, avoiding cache misses.} If we look at disk storage, the new algorithm requires around a factor 6 less storage space (saving meshes versus systems).
+The main difference is the fact that $t_{mv}$ is a factor 4 faster in the new case versus the old case.\footnote{This has to do with the fact that the two matrix-vector algorithms are different: (1) we exploit the geometrical information of the FEM system, thereby needing less communication and not needing the fanout superstep, (2) the matrix-vector product is now symmetric, avoiding cache misses.} The total speedup factor is around 3. If we look at disk storage, the new algorithm requires around a factor 6 less storage space (saving meshes versus systems).
 
 \begin{figure}
   \includegraphics[width=0.48\linewidth]{baazen_fem.pdf}
@@ -560,31 +560,25 @@ The main difference is the fact that $t_{mv}$ is a factor 4 faster in the new ca
 \end{figure}
 
 \section{Conclusion}
-In this report we have developed two parallel CG algorithms for solving $Ax =b$, with $A$ a sspd matrix. The first algorithm works by defining a distribution for the non-zeros of $A$. We then use \verb=bspmv= and a slightly altered version of \verb=bspip= to create a parallel CG implementation. This version distributes the elements $A_{ij}$ and therefore works for any sspd matrix.
-We have tested this method for a set of random generated matrices. Unfortunately, our method of matrix generation had some deficiencies. The matrices it produces are almost diagonal, which resulted in distorted timing results: the CG method converges really quick, we do not benefit from parallelizing.
+In this report we have developed two parallel CG algorithms for solving $Ax =b$, with $A$ a sspd matrix. The first algorithm works by defining a distribution for the nonzeros of $A$. We then use \verb=bspmv= and a slightly altered version of \verb=bspip= to create a parallel CG implementation. This version distributes the elements $A_{ij}$ and therefore works for any sspd matrix.
+We have tested this method for a set of random generated matrices. Unfortunately, our method of matrix generation had some deficiencies. The matrices it produces are almost diagonal, which resulted in distorted timing results: the CG method converges really quick, and we do not benefit from parallelizing.
 
-In the second part we looked at a specific class of sppd matrices, namely the stiffness matrices comming from FEM systems. After creating such a method we can use the parallel CG method from the first part to solve the FEM-system $Ax = b$. This works by creating the stifness matrix $A$ and then using Mondriaan to find a distribution for the non-zero elements.
+In the second part we looked at a specific class of sspd matrices, namely the stiffness matrices comming from FEM systems. After creating such a method we can use the parallel CG method from the first part to solve the FEM-system $Ax = b$. This works by creating the stifness matrix $A$ and then using Mondriaan to find a distribution for the non-zero elements.
 
-As we are looking at FEM-matrices we have additional informatio available about the matrix $A$. We can use the fact that the matrix is related to a triangulation of the domain. If we distribute the triangles of this trianuglation over the processors, we are able to give another way of calculating the matrix-vector $u = Av$ and the inner product $\langle u, v \rangle$.  This approach  is different from traditional methods, in the sense that multiple processors will have to maintain a copy of certain data. 
+As we are looking at FEM-matrices we have additional information available about the matrix $A$. We can use the fact that the matrix is related to a triangulation of the domain. If we distribute the triangles of this trianuglation over the processors, we are able to give another way of calculating the matrix-vector product $u = Av$ and the inner product $\langle u, v \rangle$.  This approach  is different from traditional methods, in the sense that multiple processors will have to maintain a copy of certain data. 
 
-We can use our triangle distribution and the according matrix/vector-operations for implementing parallel CG. Using a distribution given by Mondriaan we have tested and compared both methods. We saw that small FEM-system do not benefit from parallelizing. Once the systems become large however, we saw a vast speed-up in both methods when comparing sequential with the parallel version. Also, the parallel FEM cg method presented in the second part was about $2$ to $3$ times faster than the initial parallel  CG method.
-
-EM systemen zijn veel beter om mee te testen dan random matrices
+We can use our triangle distribution and the according matrix- and vector-operations for implementing parallel CG. Using a distribution given by Mondriaan, we have tested and compared both methods. We saw that small FEM-system do not benefit from parallelizing. Once the systems become large however, we saw a vast speed-up in both methods when comparing sequential with the parallel version. Also, the parallel FEM cg method presented in the second part was about $2$ to $4$ times faster than the initial parallel CG method.
 
 \section{Discussion}
-Initially we worked out exercise $4.6$ from \cite{biss04}. We gathered a lot of results for different densities, n and processors. After processing these results we came to the conclusion that most of this data was not representative for the actual performance of the parallel CG algorithm. This comes from the fact that the matrices created are \emph{really} strictly diagonally dominant, in other words, they are almost diagonal matrices. This causes CG to converge in a low amount of iterations, which results in a really small speed-up from parallelizing.
-A suggestion for the exercise might be to gather matrices from the matrix-market or using our FEM-matrices.
+Initially we worked out Exercise~4.6 from \cite{biss04}. We gathered a lot of results for different densities, $n$ and processor counts. After processing these results, we came to the conclusion that most of this data was not representative for the actual performance of the parallel CG algorithm. This comes from the fact that the matrices created are \emph{really} strictly diagonally dominant, in other words, they are almost diagonal matrices. This causes CG to converge in a low amount of iterations, which results in a really small speed-up from parallelizing.
+A suggestion for the exercise might be to gather matrices from the Matrix Market, or to use our FEM-matrices.
 
-We wanted to work on FEM-matrices, as we have both done something with FEM in the past of our academic carreer\footnote{We actually got to use this method and our previous work, see bibliography}. Clearly, these matrices provide better input for testing the parallel CG. Comparing the second method with the first method, we actually saw a nice speed-up. Again, we generated a lot of data for several triangulations and its uniform refinements. When processing the data, we again did not see a big speed-up in parallelizing. When writing the report we came to the conclusion that the systems we tested were too small. So last-minute we generated some enourmous triangulations and recreated all the timings. Here we finally saw the speed-up of parallelizing.
-
-
-Initially the plan was to work out exercise $4.6$ from \cite{biss04}. 
-geen random matrices gebruiken; grote systemen, misschien van matrixmarket halen of de onze jatten
+We wanted to work on FEM-matrices, as we have both done something with FEM in the past of our academic career.\footnote{We actually got to use this method and our previous work, which is really cool. See \cite{TODOCITES}.} Clearly, these matrices provide better input for testing the parallel CG. Comparing the second method with the first method, we actually saw a nice speed-up. Again, we generated a lot of data for several triangulations and its uniform refinements. When processing the data, we again did not see a big speed-up in parallelizing. When writing the report we came to the conclusion that the systems we tested were too small. So last-minute we generated some enourmous triangulations and recreated all the timings. Here we finally saw the speed-up of parallelizing.
 
 \section{Future work}
 During the project we came up with a lot of interesting stuff we could have figured out. Here we have a summary of things we could improve our work with.
 \subsection{Inner product}
-For large systems we saw that the time spent in mv reduces when using more processors, whilst the time spent in the inner product actually improves. We want to figure out if we could possibly improve the time of the inner product. An example would be demanding other properties from the triangle distribution. 
+For large systems we saw that the time spent in matrix-vector products reduces when using more processors, whilst the time spent in the inner product actually increases. We want to figure out if we could possibly improve the time of the inner product. An example would be demanding other properties from the triangle distribution. Another idea is to use one or two passes from the method proposed in the first Homework exercise before switching to the old method.
 \subsection{Preconditioned CG}
 The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
 \[
@@ -603,52 +597,22 @@ A preconditioner $P$ of a matrix $A$ is a matrix such that $P^{-1}A$ has a small
   \item $P$ should be (relatively) easy to construct.
 \end{itemize}
 
-TODO uitleggen wat implicit preconditioning precies inhoudt
-
-Algorithm~\ref{alg:pcg} shows CG with implicit preconditioning. \cite[Lect.~10]{sleij}
-\begin{algorithm}
-  \caption{CG with implicit preconditioning \cite[Lect.~10]{sleij}}
-  \label{alg:pcg}
-	\SetKw{KwStep}{step}
-	\SetKwInOut{Input}{Input}  
-	\SetKwInOut{Output}{Outout}
-    $\rho \gets 1$;
-		\While{asdf} {
- \tcc{Solve $Pc = r$ for c}
-       $c \gets P^{-1} r$\;
-       $\rho_{old} \gets \rho$\;
-       $\rho \gets \langle c, r \rangle$\;
-      
-			 \uIf{$k > 0$} {
-         $\beta \gets \rho/\rho_{old}$\;
-         $u \gets \beta u$\;
-			}
-       $u \gets c + u$\;
-       $w \gets Au$\;
-       $\gamma \gets \langle u, w \rangle$\;
-       $\alpha \gets \rho/\gamma$\;
-       $r \gets r - \alpha w$\;
-       $x \gets x + \alpha u$\;
-		 }
-\end{algorithm}
-
-\subsection{Choice of preconditioner}
 If $A$ is positive definite, the diagonal tells us a lot about the properties of $A$ so it makes a certain amount of sense to consider perhaps the simplest preconditioner of all:
 \[
   P = \text{diag}(a_{11}, \ldots, a_{nn}).
 \]
-The beauty of this preconditioner is the fact that its sparsity pattern is just like a dense vector. Therefore, given a vector distribution (like we already have in our implementation), creating a preconditioned version is easy. We did not have time to implement this.
+The beauty of this preconditioner is the fact that its sparsity pattern is just like a dense vector. Therefore, given a vector distribution (like we already have in our implementation), creating a preconditioned version is easy. We did not have time to implement this, unfortunately.
 
 A more advanced preconditioner that is often used in the spd case is Incomplete Cholesky.  The Cholesky factorization of a positive definite matrix $A$ is $A = LL^*$ with $L$ a lower triangular matrix. An incomplete Cholesky factorization is any sparse lower triangular $K$ that is in some sense close to $L$. One such $K$ can be found by finding the exact Cholesky decomposition, except that any entry is set to zero if the corresponding entry in $A$ is also zero. \cite[\S11.5.8]{golub}
 \subsection{Adaptive FEM}
 Another interesting aspect one could look at is adaptive FEM.
-Popularly speaking, adaptive FEM aims to improve the quality of the FEM-solution $u_V$ by locally refining the triangulation. This implies that only a part of the stiffness matrix will have to be recalculated. A few interesting things to look at would be.
+Popularly speaking, adaptive FEM aims to improve the quality of the FEM-solution $u_V$ by locally refining the triangulation. This implies that only a part of the stiffness matrix will have to be recalculated. A few interesting things to look at would be:
 \begin{itemize}
-	\item Ensure each processor autonomously refines its own part of the triangulation.
+	\item Ensure each processor autonomously refines its own part of the triangulation;
 	\item Make a load imblanace treshold that rebalances the entire triangulation after a few local refinements.
 \end{itemize}
 \subsection{Triangle distributions}
-As described before, Mondriaan does not implement all the properties we want to use when partitioning a hypergraph. For better control of the triangle distributions one could look at other partitioners, for example PaToH.
+As described before, Mondriaan does not yet implement all the properties we want to use when partitioning a hypergraph. For better control of the triangle distributions one could look at other partitioners, for example PaToH. \cite{patoh}
 \bibliographystyle{alpha}
 \bibliography{report}
 
