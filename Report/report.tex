@@ -219,7 +219,7 @@ We varied the right-hand side by either (1) setting $b := \vec 1$ (simple right-
 \subsection{Example}
 Taking $n = 4096$ and $\delta \in \{0.1, 0.2\}$, we get two sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these matrices yields Figure~\ref{fig:samples}. We see that the computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ for small systems with little computations) decreases first, then increases later. This has to do with the Cartesius hardware: see \S \ref{sec:cart}.
 
-If we look at $t_{ip}$ separately, one sees that $t_{ip}$ takes the overhand, especially in the non-shared memory case. The systems are simply too small for parallellization to be of use; the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from the first homework exercise. \cite{TODOHUISWERK} In this exercise, we found that if
+If we look at $t_{ip}$ separately, one sees that $t_{ip}$ takes the overhand, especially in the non-shared memory case. The systems are simply too small for parallellization to be of use; the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from \cite[Exercise~1.1]{biss04}. In this exercise, we found that if
 \[
   (p - 5\log_2 p) + (p + \log_2 p - 1)g + (2-\log_2 p)l > 0
 \]
@@ -260,12 +260,12 @@ The crux of the Finite Element method is that we can actually find the projectio
 \[
   u_V = \sum_{i=0}^{D-1} \alpha_i \phi_i.
 \]
-Then, $u_V$ can be proven \cite{TODO} to be the solution to the system
+Then, $u_V$ can be proven \cite[p.~19]{rayscriptie} to be the solution to the system
 \[
 	A\vec \alpha = b \text{ with }  A_{ij} := a(\phi_i, \phi_j) = \int_\Omega \nabla \phi_i \cdot \nabla \phi_j \text{ and } b_i = \int_\Omega \phi_i.
 \]
 
-The matrix $A$ is called the \emph{stiffness matrix}, which is spd.\cite{TODORAYMOND} It is also a sparse matrix, as the basis functions only `interact' with a small number of neighbours.
+The matrix $A$ is called the \emph{stiffness matrix}, which is spd \cite[p.~42]{rayscriptie}. It is also a sparse matrix, as the basis functions only `interact' with a small number of neighbours.
 
 In the coming sections, we will look at the two steps involved in solving such a FEM-system:
 \begin{description}
@@ -287,13 +287,13 @@ In fact, this $3 \times 3$ matrix can be computed in a variety of ways. One way 
 \[
   D = \begin{bmatrix} v_{0} & v_{1} & v_{2} \end{bmatrix} \in \R^{ 2 \times 3}
 \]
-with $v_{i}$ the $i$th vertex of triangle $T$. Then one can prove \cite{TODO} that
+with $v_{i}$ the $i$th vertex of triangle $T$. Then one can prove \cite{wiki} that
 \[
   \hat A_T = \frac{D^\top D}{4 \cdot \text{vol}(T)}
 \]
 with $\text{vol}(T)$ the volume of triangle $T$.
 
-We can compute the right-hand side $b_i$ in much the same way. One can prove \cite{TODOjan} that
+We can compute the right-hand side $b_i$ in much the same way. One can prove \cite[\S2.3]{janadapt} that
 \[
   b_i = \int_\Omega \phi_i = \sum_{n=0}^N \int_{T_n} \phi_i
 	= \sum_{n=0}^N \mathbf{1}_{T_n}(x_i)\text{vol}(T_n)/3.
