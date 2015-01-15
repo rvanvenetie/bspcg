@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 def writemesh( fn, N, T, G):
   fp = open( fn, 'w')

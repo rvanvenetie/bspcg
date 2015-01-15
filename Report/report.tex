@@ -191,6 +191,7 @@ We found the average value of $\bar r = 9157$ Mflop/s. See Figure~\ref{fig:cart}
 \end{figure}
 
 \subsection{Scaling tests}
+\label{sec:cgres}
 With these matrices in hand, we can perform scaling tests by varying 
 \[ p \in \{1, 2, 4, \ldots, 64\}, \quad n \in \{64, 128, \ldots, 4096 \}, \quad \delta \in \{0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2\} \]
 for slightly less than\footnote{Some matrices created errors. For instance $n = 64, \delta = 0.01$ creates on average $40.96$ non-zeroes. Trying to call Mondriaan with $p=64$ on this matrix generates an error.} $7 \cdot 7 \cdot 7 = 343$ matrices and for each matrix, approximated the solution $x$ to $Ax=b$ with $b$ equal to
@@ -242,15 +243,6 @@ the new strategy is better. A quick inspection yields that this is true for $p \
   \caption{Timing results for various sample matrices. Purple: $t_{ip}$; green: $t_{mv}$. Top row: $\delta = 0.1$. Bottom row: $\delta = 0.2$. Left column: $n = 2048$. Right column: $n = 4096$.}
   \label{fig:samples}
 \end{figure}
-
-\section{Creating the FEM-mesh}
-In two dimensions, different domains $\Omega$ provide vastly different problems of the form \eqref{eqn:problem}. We chose to generate a mesh using \cite{TODOJAN}. To find a partitioning for this mesh, we used the Mondriaan hypergraph partitioning tool.
-
-First, we create some mesh and save it to disk in some file format. We then transform this into a hypergraph, which we store in the coordinate scheme which Mondriaan can import. We then run Mondriaan on this file, receiving a triangle distribution. We load this file into a distributed mesh and save this mesh to file.
-
-The most theoretically interesting step is converting a mesh to a hypergraph. We have a set of vertex coordinates $V = \{v_1, \ldots, v_{nverts}\}$ with $v = (x, y)$ and a set of triangles $T = \{ t_1, \ldots, t_{ntris}\}$ with each triangle expressed in its vertices: $t = (v_{i_1}, v_{i_2}, v_{i_3})$. Then we have a list $B = (b_1, \ldots, b_{nverts})$ denoting if vertex $v_i$ is on the boundary $b_i = 1$ or not $b_i = 0$.
-
-A hypergraph is a generalization of a graph where hyperedges (also called \emph{nets}) are allowed to connect any number of hypervertices. We will identify triangles in the mesh with hypervertices, and vertices in the mesh with nets. A net connects triangles iff its corresponding vertex is a vertex of all these triangles. TODO beter uitleggen.
 
 \section{FEM and CG}
 We are now trying to solve a FEM system using CG. More specifically, we want to find a (numerical) solution to the two-dimensional PDE
@@ -500,8 +492,6 @@ Here we see the second advantage of this approach. By distributing triangles, we
 \end{itemize}
 Mondriaan then aims to balance communication and computation cost between processors by creating a distribution of the hypervertices. It requires setting the amount of processors $p$ and a load imbalance factor $\epsilon$ which we set to $0.1$.
 
-
-
 \subsection{Implementation details}
 \subsubsection{FEM Matrix}
 Alg~\ref{alg:calc_fem} gives an algorithm to assemble the FEM Matrix. Here
@@ -524,7 +514,32 @@ In Alg~\ref{alg_mv_fem} we have to communicate values corresponding to a shared 
 
 
 In superstep (1) of Alg~\ref{alg:mv_fem} we do not have to communicate $(u_s)_i$ values if $\Pi(i) = s$. To do this efficiently we have chosen to first store the shared vertices and then stored the vertices for which we have $\Pi(i)=s$. As processor s is the only processor we do not need to store the entire processor set.
+
+\subsection{Numerical results}
+We chose to run our implementation on a few regular polygons with sides $k \in \{3, \ldots, 8\}$, creating initial triangulations with $k$ triangles (put a vertex in the middle and connect each edge with this vertex to create a triangle). We then made $n$ uniform refinements for $n \in \{1, \ldots, 7\}$, each time quadrupling the amount of triangles in the triangulation. This yielded a vast amount of test data with $D$ between 6 and 48768. On each of these triangulations, we used $p \in \{1, 2, 4, \ldots, 64\}$.
+
+To compare our new algorithm with the original parallel CG implementation, we further created a script that creates the stiffness matrix and right-hand side, and writes them to file. As our original implementation allows for loading right-hand sides from file, we were able to plug-and-play. Loading the 8-polygon with 6 uniform refinements yields Figure~\ref{fig:poly8}.
+\begin{figure}
+  \includegraphics[width=0.3\linewidth]{poly8_6-4.png}
+  \includegraphics[width=0.3\linewidth]{poly8_6-16.png}
+  \includegraphics[width=0.3\linewidth]{poly8_6-64.png}\\
+  \includegraphics[width=\linewidth]{bazen.png}
+  \caption{Taking a regular 8-polygon as domain and doing 6 uniform refinements (for a total of $N =32768$ triangles and $D = 32256$). Top row: different triangle distribution created by Mondriaan for $p=4, 16, 64$. Each color represents one processor. Bottom: timing results for solving this system as a function of processor counts, with for each processor count the new algorithm (left) and the original parallel CG (right).}
+  \label{fig:poly8}
+\end{figure}
+
+Firstly, we see that Mondriaan does a tremendous job balancing the triangle distribution: with $p=4$ processors, it looks (close to) perfect. Another thing we see is that we achieved speedup in all cases. Moreover, $t_{mv}$ is drastically improved. Inner product time is more or less the same, and initialization time is (somewhat surprisingly) improved as well.
+
+One thing that is also unsurprising but very nice to see, is that $t_i/t_c$ is no longer very large (as opposed to the random systems we used in \S\ref{sec:cgres} (c.f.~Figure~\ref{fig:quotient}). This is because the amount of iterations is generally much larger ($k=266$ in this case). We see that yet again, $t_{ip}$ gets the overhand for large amounts of processors. This is because we have to send information to every processor, resulting in large $h$-relations.
+
+The most obvious result is that our systems are still way too small to profit from concurrency. Communication time still greatly overshadows computation time, even with the largest system we were able to create (the tool used to create FEM systems is not part of this project and was not designed for efficiency; it works with dense matrices and quickly fills up memory when called on anything larger than $25000$ degrees of freedom). In real-life applications, where systems are orders of magnitude larger, computation time is more important.
+
+\section{Conclusion}
+FEM systemen zijn veel beter om mee te testen dan random matrices
+
 \section{Future work}
+figure out how to improve $t_{ip}$
+use larger systems
 \subsection{Preconditioned CG}
 The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
 \[

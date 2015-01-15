@@ -170,6 +170,7 @@ int readfromvfile( FILE *fp, mesh_dist *mesh) {
 matrix_s *create_hypergraph_from_mesh( mesh_dist *mesh) {
   matrix_s *hypergraph = mat_create( mesh->n_tri, mesh->n_vert);
   int nonbtri = 0;
+	/*
   for( int i = 0; i < mesh->n_vert; i++) {
     if( REMOVE_BOUNDARIES && mesh->b[i]) continue;
     for( int j = 0; j < mesh->n_tri; j++) {
@@ -180,8 +181,12 @@ matrix_s *create_hypergraph_from_mesh( mesh_dist *mesh) {
     }
     nonbtri++;
   }
+	
   hypergraph->m = nonbtri;
-
+	*/
+	for (int j = 0; j < mesh->n_tri; j++)
+		for (int k =0; k < 3; k++)
+			mat_append(hypergraph, mesh->t[j][k],j,1);
   return hypergraph;
 }
 
