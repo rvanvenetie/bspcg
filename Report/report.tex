@@ -267,7 +267,7 @@ This triangulation cannot be arbitrary, as this introduces \emph{hanging nodes} 
 The fact that functions in $V$ are zero on the boundary implies that $\dim(V) = D$. The number $D$ is also called the \emph{degrees of freedom}(DOF) for a given triangulation. A useful basis for this subspace $V$ is the \emph{nodal} basis $\Phi = \{\phi_i: 0 \leq i < D\}$ of hat functions uniquely determined by the property
 \[
   \phi_i( x_j) = \delta_{ij} \quad \forall~~0 \leq i < D,\, 0 \leq j < N.
-\] An example of such a basis function is given in Figure~\ref{fig:nodal}.
+\] An example of such a basis function is given in Figure~\ref{fig:nodal}. Note that every basis function $\phi_i$ directly corresponds to a vertex (that does not lie on the boundary). This allows us to identify vertices with basis functis: every degree of freedom is coupled to a vertex inside the domain.
 \begin{figure}[h!]
 	\centering
 	\includegraphics[width=0.5\linewidth]{nodal_vijfhoek.eps}
@@ -363,16 +363,17 @@ In the previous section we saw how to assemble the FEM system. One could use thi
 
 We will look at a smarter approach which solves these disadvantages. Instead of distributing the matrix nonzeros $A_{ij}$ between processors, we distribute the triangles $T_n$ over $p$ processors, thereby solving disadvantage (3). We divide our triangulation into $p$ disjoint sets of length $N_q$
 \[
-  T = \bigsqcup_{q=0}^{p-1} T^q, \quad T^q = \{ T^q_0, \ldots, T^q_{N_q-1} \}
+  T = \bigsqcup_{q=0}^{p-1} T^q, \quad T^q = \{ T^q_0, \ldots, T^q_{N_q-1} \},
 \]
-leading to the partition $\Omega = T^0 \cup \dots \cup T^{p-1}$.
-
-A side-effect of this is that a vertex $x_i$ can belong to multiple processors. Therefore we define its \emph{processor set} 
+leading to the partition $\Omega = T^0 \cup \dots \cup T^{p-1}$. When distributing the triangles over the processors, we implicitely distribute the vertices over the processors as well.  A side-effect of this is that a vertex $x_i$ can belong to multiple processors. Therefore we define its \emph{processor set} 
 \[
   \Pi: \{0, \ldots, D-1\} \to 2^{\{0, \ldots, p-1\}}: i \mapsto \Pi(i)
 \]
-as the set of processors that contain $x_i$ in one of their triangles.
+as the set of processors that contain $x_i$ in one of their triangles. Remember that every vertex was identified with a degree of freedom. As vertices might be shared with different processors, this induces a different kind of vector distrbution: all the processors in a set must have a copy of the corresponding vector value.
 
+\subsection{Matrix-vector calculation}
+We need to 
+To implement CG with our new distribution we need to calculate $
 Using \eqref{eqn:div} leads to a natural decomposition of $A$ into
 \[
 	A = \sum_{q=0}^{p-1} A^q\quad \text{ with } A^q= \sum_{n=0}^{N_q-1} A_{T^q_n} \quad \text{ so that } (A^q)_{ij} = \sum_{n=0}^{N_q-1} a_{T_n}(\phi_i,\phi_j).
@@ -449,7 +450,7 @@ Algorithm~\ref{alg:init_fem} describes how to create all the data needed for exe
  \label{alg:init_fem}
 \end{algorithm}
 
-Note that the CG algorithm also requires us to calculate the inner product. 
+Note that the CG algorithm also requires us to calculate the inner product. We calculate this inner product using a slightly altered version Algorithm~\ref{alg:ip}, described in the previous work. In our case, we are dealing with
 \begin{algorithm}[H]
 \SetKw{KwStep}{step}
 \SetKwInOut{Input}{Input}  
@@ -474,6 +475,9 @@ Note that the CG algorithm also requires us to calculate the inner product.
  \caption{Inner product for vectors in FEM-system for $P(s)$}
  \label{alg:ip_fem}
 \end{algorithm}
+
+The entire CG algorithm is now the same as the one described in Alg~\ref{bla:bla}, with the inner product and matrix vector replaced
+by the one specified in this section.
 \subsection{Finding a processor distribution}
 Given a vertex $x_i$, there are two possibilities:
 \begin{enumerate}
