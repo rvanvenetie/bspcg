@@ -178,23 +178,49 @@ Summing everything together, we get a total BSP cost per iteration of
 TODO wat nu? dit relateren aan het aantal iteraties dat nodig is? Wordt snel sketchy
 
 \section{Testing our parallel CG}
-To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in the book: create a random sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
+To test our implementation, we want to have access to a lot of similar matrices. One way to do this is described in \cite[Ex.~4.6]{biss04}: create a random sparse matrix $B$ with values in $[-1,1]$, then take $A \gets B + B^\top + \mu I$ with $\mu$ such that $A$ is strictly diagonally dominant. As the idea of this is merely to generate a matrix $A$ that is symmetric positive definite, we opted for a slightly easier approach. 
 
-We need to compute a \emph{symmetric} matrix, so we only have to look at the lower triangular part of this matrix. First we create a 
-random sparse strictly lower triangular matrix $B$. We do this by specifying some
-density $\delta$ and placing a random number in $[-1,1]$ on position $(i,j)$ with probability $\delta$. The matrix
-must be positive definite, which is achieved \cite[Ex.~24.2]{trefbau} if
+We need to compute a \emph{symmetric} matrix, so we only have to look at the lower triangular part of this matrix. First we create a random sparse strictly lower triangular matrix $B$. We do this by specifying some density $\delta$ and placing a random number in $[-1,1]$ on position $(i,j)$ with probability $\delta$. The matrix must be positive definite, which is achieved \cite[Ex.~24.2]{trefbau} if
 \[
-  |A_{ii}| > \sum_{j=1, j\ne i}^n |A_{ij}|= \sum_{j=1}^{i-1} |B_{ij}| + |B_{ji}|.
+  |A_{ii}| > \sum_{j=1, j\ne i}^n |A_{ij}|= \sum_{j=1}^{i-1} (|B_{ij}| + |B_{ji}|).
 \]
-While placing the non-zero entries in the lower triangular part of $B$, we therefore iteratively store the sum in the right hand side of this equation for the
-corresponding diagonal element. Let $\mu$ be the maximum of these sums, we now know that $B + B^\top + \mu I$ is a symmetric
-positive definite matrix. Finally, to add some more randomness to the diagonal, we replace the diagonal element $\mu$ by a random number in $[\mu, \mu + 2]$ with probability $\delta$.
+Let $\mu$ be the maximum of the row sums. We now know that $B + B^\top + \mu I$ is a symmetric positive definite matrix. Finally, to add some more randomness to the diagonal, we replace the diagonal element $\mu$ by a random number in $[\mu, \mu + 2]$ with probability $\delta$.
 
-This parameter $\delta$ gives us an indication for the `sparseness' of the matrix.\footnote{It is actually not the density but the amount of non-zero entries per TODO row/column that is important to the complexity of the matrix-vector product \cite[p.~178]{biss04}. As we are dealing with a square matrix, these two quantities are actually equivalent.} With this method we can generate a variety of matrices
-for different combinations of $n$ and $\delta$, which gives insight in the performance of our parallel implementation.
+This method, and its counterpart given in \cite[Ex.~4.6]{biss04}, has one glaring drawback. Matrices of this type are diagonally dominant, implying that the diagonal elements are \emph{much} larger than the offdiagonals! The resulting matrix is close to diagonal. As solving $Ax=b$ for diagonal $A$ using CG completes in one step, it will be no surprise that every test with matrices like these will result in very few iterations.
 
-\subsection{Benchmark of Cartesius}
+We created a lot of systems,\footnote{We varied $n$ between $2^6$ and $2^{12}$, $\delta := nz(A)/n^2$ between $0.01$ and $0.2$ with 6 values and $p$ between $2^0$ and $2^6$ for a total of about 300 matrices. } and for each system computed:
+\begin{gather*} 
+P, n, nz(A), \delta = nz(A)/n^2, k \text{(number of iterations)}, \\
+t_i~ \text{(time to initialize)}, \quad t_{mv}~ \text{(time matrix-vector)}, \quad t_{ip}~ \text{(time inner product)}, \\
+t_l~ \text{(time local operations)}, \quad t_g~ \text{(time spent computing global solution)}, \\
+t_c = t_{mv} + t_{ip} + t_l~ \text{(time spent in while-loop)}, \quad t = t_i + t_{mv} + t_{ip} + t_l + t_g~ \text{(total time)}.
+\end{gather*}
+
+We did a lot of testing and came to the conclusion that $k\sim 10$ -- being the order of amount of iterations needed for CG to converge --  is too low to get any significant result, as communication time is just too much of a contribution. 
+
+We varied the right-hand side by either (1) setting $b := \vec 1$ (simple right-hand side), (2) $b := A\vec 1$ (known solution), (3) $b_i \in [0, 1]$ (random right-hand side) and (4) the ability to load $b$ from file. The last method proved very useful later on, when comparing this algorithm with our special-purpose FEM-CG. One conclusion of some significance is that the iteration count (and the total time) is more or less invariant under the choice of right-hand side.
+
+\subsection{Example}
+Taking $n = 4096$ and $\delta \in \{0.1, 0.2\}$, we get two sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these matrices yields Figure~\ref{fig:samples}. We see that the computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$) decreases first, then increases later. This has to do with the Cartesius hardware: see \S \ref{sec:cart}.
+
+If we look at $t_{mv}$ and $t_{ip}$ separately, one sees that
+
+
+we see that for $p=1$, $t_{mv}$ scales linearly with $nz(A)$ (as we concluded before). We also see that for $p=64$, $t_{ip}$ is almost the same across the different matrices. This indicates that the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from the first homework exercise. \cite{TODOHUISWERK} In this exercise, we found that if
+\[
+  (p - 5\log_2 p) + (p + \log_2 p - 1)g + (2-\log_2 p)l > 0
+\]
+the new strategy is better. A quick inspection yields that this is true for $p \leq 4$ and \emph{very} false (values being in the order of negative millions) for $p > 4$, indicating that we won't have to try.
+
+\begin{figure}
+  \includegraphics[width=0.48\linewidth]{n4096d0_1mvip.png}
+  \includegraphics[width=0.48\linewidth]{n4096d0_2mvip.png}
+  \caption{Timing results for various sample matrices. Purple: $t_{ip}$; green: $t_{mv}$.}
+  \label{fig:samples}
+\end{figure}
+
+
+\subsection{Cartesius hardware}
 \label{sec:cart}
 We ran \texttt{bspbench} with $n=100$, $h=256$ and $p \in \{1, \ldots, 64\}$ to get an idea of values for $r$, $g$ and $l$ for processor counts and get an idea of the scaling properties of Cartesius.
 
@@ -205,60 +231,6 @@ We found the average value of $\bar r = 9157$ Mflop/s. See Figure~\ref{fig:cart}
   \includegraphics[width=0.49\linewidth]{cartl.png}
   \caption{Results of running \texttt{bsbench} on a thin node of Cartesius with $n=100$, $h=256$. $x$-axis: $p \in \{1, \ldots, 64\}$. $y$-axis: left -- $g$, right -- $l$.}
   \label{fig:cart}
-\end{figure}
-
-\subsection{Scaling tests}
-\label{sec:cgres}
-With these matrices in hand, we can perform scaling tests by varying 
-\[ p \in \{1, 2, 4, \ldots, 64\}, \quad n \in \{64, 128, \ldots, 4096 \}, \quad \delta \in \{0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.2\} \]
-for slightly less than\footnote{Some matrices created errors. For instance $n = 64, \delta = 0.01$ creates on average $40.96$ non-zeroes. Trying to call Mondriaan with $p=64$ on this matrix generates an error.} $7 \cdot 7 \cdot 7 = 343$ matrices and for each matrix, approximated the solution $x$ to $Ax=b$ with $b$ equal to
-\begin{enumerate}
-  \item $b = \vec 1 = (1, \ldots, 1)$ (easy right-hand side);
-  \item $b = A\vec 1$ (known solution);
-  \item $b_i \in [0, 1]$ random (random right-hand side).
-\end{enumerate}
-
-For each system, we computed:
-\begin{gather*} 
-P, n, nz(A), \delta = nz(A)/n^2, k \text{(number of iterations)}, \\
-t_i~ \text{(time to initialize)}, \quad t_{mv}~ \text{(time matrix-vector)}, \quad t_{ip}~ \text{(time inner product)}, \\
-t_l~ \text{(time local operations)}, \quad t_g~ \text{(time spent computing global solution)}, \\
-t_c = t_{mv} + t_{ip} + t_l~ \text{(time spent in while-loop)}, \quad t = t_i + t_{mv} + t_{ip} + t_l + t_g~ \text{(total time)}.
-\end{gather*}
-
-The first thing we saw is that the choice of RHS is hardly important for the computation time $t_c$. We therefore made the arbitrary choice to use $b = \vec 1$.
-
-We quickly realized that time spent doing local operations $t_l$ and computing global solution $t_g$ will probably not be of much significance. This was quickly verified: see Figure~\ref{fig:nonsig}.
-\begin{figure}
-  \includegraphics[width=0.49\linewidth]{tlt.png}
-  \includegraphics[width=0.49\linewidth]{tgt.png}
-  \caption{Percentage of total time spent doing local computations (left) and finding the global solution from the local components (right) for our test matrices.}
-  \label{fig:nonsig}
-\end{figure}
-
-One other thing we noticed right away is the fact that for our class of matrices $A = B + B^\top + \mu I$, $k$ is very low (in the order of 10). This has the effect that $t_i$ greatly overshadows $t_c$ for large $nz(A)$: see Figure~\ref{fig:quotient}. The reason for this is very insightful to the problem: while strict diagonal dominance implies positive definiteness, it also implies that the diagonal elements are \emph{much} larger than the off-diagonal elements. The resulting matrix is close to being diagonal! As solving $Ax=b$ for a diagonal matrix using CG completes in one step, it is no surprise that CG ends quickly when $A$ is near-diagonal.
-
-\begin{figure}
-  \includegraphics[width=\linewidth]{quotient.png}
-  \caption{Quotient of initialization time $t_i$ and computation time $t_c$ for random matrices $A$ as function of $nz(A)$.}
-  \label{fig:quotient}
-\end{figure}
-
-Taking $n \in \{2048, 4096\}$ and $\delta \in \{0.1, 0.2\}$, we get a few sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these four matrices yields Figure~\ref{fig:samples}. We see that the optimal computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ as $t_l \approx 0$ by Figure~\ref{fig:nonsig}) seems to lie somewhere between $p=8$ and $p=32$. The most likely option is around $p=24$, as this is the highest amount of processor cores that is still on one shared-memory system (see \S \ref{sec:cart}). We can overcome this by increasing the computational effort every processor has to do (increasing $n$ and $nz(A)$), but this proved hard, as Mondriaan takes quite some time to generate the distributions already.
-
-If we look at $t_{mv}$ and $t_{ip}$ separately, we see that for $p=1$, $t_{mv}$ scales linearly with $nz(A)$ (as we concluded before). We also see that for $p=64$, $t_{ip}$ is almost the same across the different matrices. This indicates that the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from the first homework exercise. \cite{TODOHUISWERK} In this exercise, we found that if
-\[
-  (p - 5\log_2 p) + (p + \log_2 p - 1)g + (2-\log_2 p)l > 0
-\]
-the new strategy is better. A quick inspection yields that this is true for $p \leq 4$ and \emph{very} false (values being in the order of negative millions) for $p > 4$, indicating that we won't have to try.
-
-\begin{figure}
-  \includegraphics[width=0.48\linewidth]{n2048d0_1mvip.png}
-  \includegraphics[width=0.48\linewidth]{n2048d0_2mvip.png}
-  \includegraphics[width=0.48\linewidth]{n4096d0_1mvip.png}
-  \includegraphics[width=0.48\linewidth]{n4096d0_2mvip.png}
-  \caption{Timing results for various sample matrices. Purple: $t_{ip}$; green: $t_{mv}$. Top row: $\delta = 0.1$. Bottom row: $\delta = 0.2$. Left column: $n = 2048$. Right column: $n = 4096$.}
-  \label{fig:samples}
 \end{figure}
 
 \section{FEM and CG}
@@ -298,7 +270,7 @@ The matrix $A$ is called the \emph{stiffness matrix}, which is \cite{TODORAYMOND
 
 In the coming sections, we will look at the two steps involved in solving such a FEM-system:
 \begin{description}
-  \item[Assembly] is the act of finding the nonzero entries of $A$ and $b$;
+  \item[Assembly] is the act of finding the nonzeros of $A$ and $b$;
   \item[Solving] the system; as $n$ (and thus $D$) is generally very large, we want to use an efficient solver. We will be using CG.
 \end{description}
 
@@ -529,7 +501,7 @@ Mondriaan then aims to balance communication and computation cost between proces
 Alg~\ref{alg:calc_fem} gives an algorithm to assemble the FEM Matrix. Here
 we assumed to have a method for inserting or adding nonzeros at abritrare positions in the matrix. However,
 this is not easily done in most data structures for sparse matrices as we do not know the
-indices holding a non-zero beforehand. We adapt the following strategy, we first create a list
+indices holding a nonzero beforehand. We adapt the following strategy, we first create a list
 of all the nonzeros to add together in the triple format $(i,j,a_{ij})$.
 This list will contain multiple elements with the same index $ij$ when
 the basis function $i$ and $j$ interact on multiple triangles. Afterwards we know
