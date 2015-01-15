@@ -55,12 +55,12 @@
   \vfill
   \today
   \vfill
-  \begin{figure}
+  \begin{figure}[h!]
   \includegraphics[width=0.45\linewidth]{poly8_6-16.png}
   \includegraphics[width=0.45\linewidth]{poly5_6-64.png}
   \label{fig:mooi}
 \end{figure}
-\begin{figure}
+\begin{figure}[h!]
 	\center
   \includegraphics[width=\linewidth]{voorkantjuh.png}
    \caption*{Happy, because we're next to Cartesius}
@@ -92,7 +92,7 @@ In \S6 we will narrow our class of sspd matrices to matrices found in the (conti
 
 In \S7 we will test both our methods on a set of FEM-matrices. What method performs better? When does the CG method benefit from parallelizing, and how large does our system need to be?
 
-We will provide thoughts for future work in \S10. All our code is open-source and available at \url{http://github.com/rvanvenetie/bspcg}.
+We will provide thoughts for future work in \S10. All our code is open-source and available at \url{http://github.com/rvanvenetie/bspcg/releases/tag/v1.0}.
 
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS routines. \cite{blas} 
@@ -211,7 +211,7 @@ We created a lot of systems,\footnote{We varied $n$ between $2^6$ and $2^{12}$, 
 P, n, nz(A), \delta = nz(A)/n^2, k \text{(number of iterations)}, \\
 t_i~ \text{(time to initialize)}, \quad t_{mv}~ \text{(time matrix-vector)}, \quad t_{ip}~ \text{(time inner product)}, \\
 t_l~ \text{(time local operations)}, \quad t_g~ \text{(time spent computing global solution)}, \\
-t_c = t_{mv} + t_{ip} + t_l~ \text{(time spent in while-loop)}, \quad t = t_i + t_{mv} + t_{ip} + t_l + t_g~ \text{(total time)}.
+t_{iter} = t_{mv} + t_{ip} + t_l~ \text{(time spent iterating)}, \quad t = t_i + t_{mv} + t_{ip} + t_l + t_g~ \text{(total time)}.
 \end{gather*}
 
 We did a lot of testing and came to the conclusion that $k\sim 10$ -- being the order of amount of iterations needed for CG to converge --  is too low to get any significant result, as communication time is just too much of a contribution. 
@@ -219,7 +219,7 @@ We did a lot of testing and came to the conclusion that $k\sim 10$ -- being the 
 We varied the right-hand side by either (1) setting $b := \vec 1$ (simple right-hand side), (2) $b := A\vec 1$ (known solution), (3) $b_i \in [0, 1]$ (random right-hand side) and (4) the ability to load $b$ from file. The last method proved very useful later on, when comparing this algorithm with our special-purpose FEM-CG. One conclusion of some significance is that the iteration count (and the total time) is more or less invariant under the choice of right-hand side.
 
 \subsection{Example}
-Taking $n = 4096$ and $\delta \in \{0.1, 0.2\}$, we get two sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these matrices yields Figure~\ref{fig:samples}. We see that the computation time ($t_c = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ for small systems with little computations) decreases first, then increases later. This has to do with the Cartesius hardware: see \S \ref{sec:cart}.
+Taking $n = 4096$ and $\delta \in \{0.1, 0.2\}$, we get two sample matrices. Looking at $t_{mv}$ and $t_{ip}$ for these matrices yields Figure~\ref{fig:samples}. We see that the computation time ($t_{iter} = t_l + t_{mv} + t_{ip} \approx t_{mv} + t_{ip}$ for small systems with little computations) decreases first, then increases later. This has to do with the Cartesius hardware: see \S \ref{sec:cart}.
 
 If we look at $t_{ip}$ separately, one sees that $t_{ip}$ takes the overhand, especially in the non-shared memory case. The systems are simply too small for parallellization to be of use; the time spent computing the local inner product is heavily outweighed by the communication costs. This raises the question if $t_{ip}$ would improve had we used the inner product communication strategy from \cite[Exercise~1.1]{biss04}. In this exercise, we found that if
 \[
@@ -233,7 +233,6 @@ the new strategy is better. A quick inspection yields that this is true for $p \
   \caption{Timing results for two sample matrices. Purple: $t_{ip}$; green: $t_{mv}$.}
   \label{fig:samples}
 \end{figure}
-
 
 \section{FEM and CG}
 We are now trying to solve a FEM system using CG. More specifically, we want to find a (numerical) solution to the two-dimensional PDE
@@ -351,7 +350,7 @@ leading to the partition $\Omega = T^0 \cup \dots \cup T^{p-1}$. When distributi
 \[
   \Pi: \{0, \ldots, D-1\} \to 2^{\{0, \ldots, p-1\}}: i \mapsto \Pi(i)
 \]
-as the set of processors that contain $x_i$ in one of their triangles. Remember that every vertex was identified with a degree of freedom. As vertices might be shared with different processors, this induces a different kind of vector distrbution than the one described in \cite[Ch.~4]{biss04}: all the processors in a set must have a copy of the corresponding vector value.
+as the set of processors that contain $x_i$ in one of their triangles. Each vertex also has an \emph{owner}$,  \Pi_{owner}(i)$, which is just some processor in ons processor set. We chose $\Pi_{owner}(i) := \min \Pi(i)$. Remember that every vertex was identified with a degree of freedom. As vertices might be shared with different processors, this induces a different kind of vector distrbution than the one described in \cite[Ch.~4]{biss04}: all the processors in a set must have a copy of the corresponding vector value.
 Figure~\ref{fig:procset} is an illustration of the definitions given in the previous section. 
 
 \begin{figure}
@@ -442,12 +441,7 @@ Algorithm~\ref{alg:init_fem} now describes how to create $\hat A^q$ for each pro
 \end{algorithm}
 
 \subsection{Inner product}
-The CG Algorithm also requires the inner product between two vectors. We calculate this inner product using a slightly altered version of Algorithm~\ref{alg:ip}. In the new case, the vector elements are duplicated on every processor in the corresponding processor set. Therefore, for each vector element we must make a choice which processor from the processor set adds the contributions of this element to the inner product. We define this choice by the creating an operator that gives an `owner' of each vector element:
-\[
-	\Pi_{\text{owner}}(i) \in \Pi(i).
-\]
-
-In our implementation we chose to make the processor with the lowest number the owner; $\Pi_{owner}(i) := \min \Pi(i)$. The parallel inner product algorithm for these distributions is now given in Algorithm~\ref{alg:fem_ip}.
+The CG Algorithm also requires the inner product between two vectors. We calculate this inner product using a slightly altered version of Algorithm~\ref{alg:ip}. In the new case, the vector elements are duplicated on every processor in the corresponding processor set. Therefore, for each vector element we must make a choice which processor from the processor set adds the contributions of this element to the inner product. This is done by $\Pi_{owner}(i)$, defined in \S6.2. The parallel inner product algorithm for these distributions is now given in Algorithm~\ref{alg:fem_ip}.
 
 
 \begin{algorithm}[H]
