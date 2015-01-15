@@ -1,7 +1,9 @@
 import numpy as np
+from os.path import basename
 import sys
 from matplotlib import cm
-import matplotlib.pyplot as plt
+from scipy.sparse import dok_matrix, lil_matrix
+#import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection,Line3DCollection
@@ -100,9 +102,13 @@ TODO: Replace all appends with predefined matrices
 def Refine(N,T,G):
 	n = N.shape[0] #Amount of vertices
 	m = T.shape[0] #Amount of triangles
-	refined = np.zeros((n,n)) #Indicates if the edge has a new refined vertice yet
+	refined = lil_matrix((n,n), dtype=np.int)
+	#refined = np.zeros((n,n)) #Indicates if the edge has a new refined vertice yet
 	edges = [(0,1),(0,2),(1,2)] #All edges in a triangle
 	TT = np.zeros((m*4,3),dtype=np.int)
+	N = np.resize(N,(m*4,2))
+	G = np.resize(G, m*4)
+	n_index = n #Current index in N/G
 	TIndex = 0 #Current index in TT
 	for k in range(m):
 		Tk = T[k,:] #Vertices
@@ -110,16 +116,21 @@ def Refine(N,T,G):
 		new_indices = np.zeros(3,dtype=np.int) #Store indices of new vertices in triangle
 		for j in range(3): #Find indices of vertices of sub-triangles
 			a,b = edges[j] #One of the three sides of triangle Tk
-			if refined[Tk[a],Tk[b]] == 0: #We have not yet created new vert on this edge
+			Tka = min(Tk[a], Tk[b])
+			Tkb = max(Tk[a], Tk[b])
+			if refined[Tka,Tkb] == 0: #We have not yet created new vert on this edge
 				#print "Creating midpoint on", Tk[a],Tk[b]
 				new_vert =	(C[a,:] + C[b,:])/ 2.0
-				N = np.append(N,[new_vert],axis=0)
-				G = np.append(G,1) #Assume this vertice is on the boundary
+				N[n_index,:] = new_vert
+				G[n_index] = 1
+				n_index += 1
+				#N = np.append(N,[new_vert],axis=0)
+				#G = np.append(G,1) #Assume this vertice is on the boundary
 				new_indices[j] = n
-				refined[Tk[a],Tk[b]] = refined[Tk[a],Tk[b]] = n
+				refined[Tka,Tkb] = n
 				n = n +1
 			else:
-				new_indices[j] = refined[Tk[a],Tk[b]]
+				new_indices[j] = refined[Tka,Tkb]
 				G[new_indices[j]] = 0 #Not on the boundary
 				#print "Already have a midpoint on", Tk[a],Tk[b]
 		#New_indices now holds the vertices of the sub-triangles
@@ -127,6 +138,7 @@ def Refine(N,T,G):
 										 [Tk[1],new_indices[0],new_indices[2]],
 										 [Tk[2],new_indices[1],new_indices[2]],
 										 [new_indices[0],new_indices[1],new_indices[2]]]
+	return np.resize(N,(n_index,2)), TT, np.resize(G, n_index)
 	return N,TT,G
 	
 def Voorbeeld():
@@ -203,18 +215,19 @@ def Voorbeeld():
 #plt.rc('text', usetex=True)
 #plt.rc('font', family='serif')
 #Voorbeeld()
-fn = sys.argv[1] if len( sys.argv) > 1 else "lshaped.m"
-(distributed, nverts, ntris, x, y, b, t, P, p) = plottri.readmesh( fn)
+fn = sys.argv[1]  if len( sys.argv) > 1 else "lshaped"
+(distributed, nverts, ntris, x, y, b, t, P, p) = plottri.readmesh( fn + ".m")
 N = np.array([x, y]).T
+N = np.copy(N)
 T = t.astype('int')
 G = b.astype('int')
-	
-for i in range(10):
+for i in range(12):
     print "Refine"
     N,T,G = Refine(N,T,G)
-    plottri.writemesh( "faka%d.m" % i, N, T, G)
-    print G.shape
+    plottri.writemesh( fn + "_%d.m" % (i+2), N, T, G)
+    print N.shape, T.shape
 
+exit()
 f = lambda pt: 1
 g = 0
 uh, sol, A, M = LinFEM(N,T,G,f,g)

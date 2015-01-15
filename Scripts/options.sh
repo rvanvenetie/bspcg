@@ -1,4 +1,6 @@
 #!/bin/bash
+mesh_arr=("poly5")
+#mesh_arr=("lshaped_" "poly5" "poly8")
 if [[ `whoami` == "bissstud" ]]; then
 	cd $HOME/Students14/Jan/bspcg/Scripts/
 	echo "Running on Cartesius $@"

@@ -19,7 +19,12 @@ cp $meshname.m $meshname/$meshname.m
 cd $meshname
 echo "Generating distributed mesh for $meshname with p=$p"
 #Generate hypegraph
-$m2mtx $meshname.m > $meshname.mtx_tmp
+if [ ! -f "$meshname.mtx_tmp" ]
+then
+	$m2mtx $meshname.m > $meshname.mtx_tmp
+fi
+
 #Generate distributed hypergraph
 $mond $meshname.mtx_tmp $p 0.1 -SplitStrategy=onedimcol && $mtx2dm $meshname.m $p $meshname.mtx_tmp-v$p > $meshname.m-P$p
-rm *.mtx_tmp*
+#
+rm *.mtx_tmp-*

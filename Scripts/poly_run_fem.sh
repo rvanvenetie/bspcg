@@ -1,12 +1,14 @@
 #!/bin/bash
 #SBATCH -n 64
-#SBATCH -p short
-#SBATCH -t 30:00
+#SBATCH -p normal
+#SBATCH -t 2:00:00
 source options.sh
 cwd=$(pwd)
 fem="$cwd/../FEM/bspfem"
 meshdir="$cwd/../Meshes"
-for poly in $meshdir/poly*.m
+for mesh in "${mesh_arr[@]}"
+do
+for poly in $meshdir/$mesh*.m
 do
   for p in "${parr[@]}"
   do
@@ -17,4 +19,5 @@ do
 			$runcmd $fem $matname.m $p
 		fi
   done
+done
 done
