@@ -276,7 +276,7 @@ This triangulation cannot be arbitrary, as this introduces \emph{hanging nodes} 
 The fact that functions in $V$ are zero on the boundary implies that $\dim(V) = D$. The number $D$ is also called the \emph{degrees of freedom}(DOF) for a given triangulation. A useful basis for this subspace $V$ is the \emph{nodal} basis $\Phi = \{\phi_i: 0 \leq i < D\}$ of hat functions uniquely determined by the property
 \[
   \phi_i( x_j) = \delta_{ij} \quad \forall~~0 \leq i < D,\, 0 \leq j < N.
-\] An example of such a basis function is given in Figure~\ref{fig:nodal}.
+\] An example of such a basis function is given in Figure~\ref{fig:nodal}. Note that every basis function $\phi_i$ directly corresponds to a vertex (that does not lie on the boundary). This allows us to identify vertices with basis functis: every degree of freedom is coupled to a vertex inside the domain.
 \begin{figure}[h!]
 	\centering
 	\includegraphics[width=0.5\linewidth]{nodal_vijfhoek.eps}
@@ -372,22 +372,30 @@ In the previous section we saw how to assemble the FEM system. One could use thi
 
 We will look at a smarter approach which solves these disadvantages. Instead of distributing the matrix nonzeros $A_{ij}$ between processors, we distribute the triangles $T_n$ over $p$ processors, thereby solving disadvantage (3). We divide our triangulation into $p$ disjoint sets of length $N_q$
 \[
-  T = \bigsqcup_{q=0}^{p-1} T^q, \quad T^q = \{ T^q_0, \ldots, T^q_{N_q-1} \}
+  T = \bigsqcup_{q=0}^{p-1} T^q, \quad T^q = \{ T^q_0, \ldots, T^q_{N_q-1} \},
 \]
-leading to the partition $\Omega = T^0 \cup \dots \cup T^{p-1}$.
-
-A side-effect of this is that a vertex $x_i$ can belong to multiple processors. Therefore we define its \emph{processor set} 
+leading to the partition $\Omega = T^0 \cup \dots \cup T^{p-1}$. When distributing the triangles over the processors, we implicitely distribute the vertices over the processors as well.  A side-effect of this is that a vertex $x_i$ can belong to multiple processors. Therefore we define its \emph{processor set} 
 \[
   \Pi: \{0, \ldots, D-1\} \to 2^{\{0, \ldots, p-1\}}: i \mapsto \Pi(i)
 \]
-as the set of processors that contain $x_i$ in one of their triangles.
+as the set of processors that contain $x_i$ in one of their triangles. Remember that every vertex was identified with a degree of freedom. As vertices might be shared with different processors, this induces a different kind of vector distrbution: all the processors in a set must have a copy of the corresponding vector value.
+Figure~\ref{fig:procset} is an illustration of the definitions given in the previous section. 
 
-Using \eqref{eqn:div} leads to a natural decomposition of $A$ into
+\begin{figure}[h!]
+  \includegraphics[width=0.5\linewidth]{procset.png}
+  \caption{A sample mesh with its triangle distribution. Only vertices not on the boundary have been numbered. For these vertices, $\Pi(0) = \{0, 1, 2, 3\}, \Pi(1) = \{0\}, \Pi(2) = \{0, 1\}$.}
+  \label{fig:procset}
+\end{figure}
+\subsection{Matrix-vector calculation}
+To implement CG with our new distribution we need to calculate the matrix-vector $u = Av$. This is where we profit from using the geometrical relation between the triangle distribution and the stiffness matrix $A$. Using \eqref{eqn:div} leads to a natural decomposition of $A$ into
 \[
-	A = \sum_{q=0}^{p-1} A^q\quad \text{ with } A^q= \sum_{n=0}^{N_q-1} A_{T^q_n} \quad \text{ so that } (A^q)_{ij} = \sum_{n=0}^{N_q-1} a_{T_n}(\phi_i,\phi_j).
+	A = \sum_{q=0}^{p-1} A^q\quad \text{ with } A^q= \sum_{n=0}^{N_q-1} A_{T^q_n} \quad \text{ and } (A^q)_{ij} = \sum_{n=0}^{N_q-1} a_{T_n}(\phi_i,\phi_j).
 \]
-These matrices $A^q$ are $D \times D$ but again very sparse. We identify $A^q$ with a smaller matrix $\hat A^q$ of size $D_q \times D_q$ by removing zero rows and columns. As CG requires the calculation of $v = Au$, we will first calculate $v^q = A^q u$ (which is in practice done by computing the smaller system $\hat v^q = \hat A^q \hat u$). Now to find the final solution we need to calculate $v = \sum_{q =0}^{p-1} v^q$. 
-Every non-zero element in $v^q$ corresponds to a vertex $x_i$ \footnote{Actually to a degree of freedom, but in our case degrees of freedom correspond to vertices inside the domain}, which is shared by the processors in its processor set $\Pi(i)$. To ensure that every processor in $\Pi(i)$ has the correct value of $v_i$ we must communicate the value of this nonzero in $v^q$ to all the processors in $\Pi(i)$. In Algorithm~\ref{alg:fem_mv} we give the implementation of this parallel $v = Au$ for this FEM-matrix.
+The matrices $A^q$ are $D \times D$ but again very sparse. We identify $A^q$ with a smaller matrix $\hat A^q$ of size $D_q \times D_q$ by removing zero rows and columns. As the name suggest, the processor $q$ constructs the matrix $A^q$ (actually $\hat A^q$) locally. This is possible because $A^q$ only depends on triangles that are distributed to processor $q$.
+
+Now for calculating the entire product $v = Au$, we will first calculate $v^q = A^q u$ (actually $\hat v^q = \hat A^q \hat u$). We can find $v$ by adding these local vectors, $v = \sum_{q =0}^{p-1} v^q$. Remember that element $v_i$ corresponds to a vertex a vertex $x_i$, which is shared by the processors in the set $\Pi(i)$. We calculate the value $v_i$ by letting every processor in the set $\Pi(i)$ send $(v^q)_i$ to every other processor in the set. After this communication step, every processor sums over these local values to find $v_i$. This method ensures that every processor sharing vertex $x_i$ gets the correct value of $v_i$. In Algorithm~\ref{alg:fem_mv} we give the implementation of this parallel $v = Au$ for this FEM-matrix.
+
+
 \begin{algorithm}[H]
 \SetKw{KwStep}{step}
 \SetKwInOut{Input}{Input}  
@@ -413,15 +421,18 @@ Every non-zero element in $v^q$ corresponds to a vertex $x_i$ \footnote{Actually
 		}
 	}
  \caption{Matrix-vector product for a FEM-system for $P(s)$}
- \label{alg:mv_fem}
+ \label{alg:fem_mv}
 \end{algorithm}
 
-To create $\hat A^q$ we need to identify the zero rows (and by symmetri columns) of $A^q$. A row $i$ is zero if $(A^q)_{ij} = 0$ for $0 \leq j < D$, which corresponds to the situation where basis function $\phi_i$ has no interactions on any of the triangles contained by processor $q$. Translating this back to the triangulation, we see that this happens if processor $q \not \in \Pi(i)$. This gives us an explicit formula for $D_q$:
+\subsection{Creating $\hat A^q$}
+To create $\hat A^q$ we need to identify the zero rows (and by symmetri columns) of $A^q$. A row $i$ is zero if $(A^q)_{ij} = 0$ for $0 \leq j < D$, this corresponds to the situation where basis function $\phi_i$ has no interactions on any of the triangles contained by processor $q$.  Translating this back to the triangulation, we see that this happens if processor $q$ does not use vertex/dof $x_i$: $q \not \in \Pi(i)$. This gives us an explicit formula for $D_q$:
 \[
 	D_q = \#\{ i | 0 \leq i < D,\, q \in \Pi(i)\}.
 \]
 
-Algorithm~\ref{alg:init_fem} describes how to create all the data needed for executing our parallel $Av$ with the stiffness matrix $A$.
+Algorithm~\ref{alg:init_fem} now describes how to create $\hat A^q$ for each processor, given a distribution $\psi$ of the triangles. Here  we assume that the initial distribution is entirely read by processor $0$.
+
+
 \begin{algorithm}[H]
 \SetKw{KwStep}{step}
 \SetKwInOut{Input}{Input}  
@@ -430,7 +441,7 @@ Algorithm~\ref{alg:init_fem} describes how to create all the data needed for exe
 	     $T : $ list of $N$ triangles, $\text{distr}(T) = \psi$.}
 \Output{$\Pi:$ proccesor set for each DOF, \\
 	     $\Pi_{\text{owner}}:$ the `owner' of a DOF, \\
-			 $A^s: $ local sparse FEM-matrix for $P(s)$, \\
+			 $\hat A^s: $ local sparse FEM-matrix for $P(s)$, \\
 			 $b : $ vector of length $D$, $\text{distr}(b) = \Pi$.}
   \nlset{(0)}
 	\If{$ s = 0$} {
@@ -447,18 +458,26 @@ Algorithm~\ref{alg:init_fem} describes how to create all the data needed for exe
 		}
 	}
   \nlset{(3)}
-	Calculate local FEM-matrix $A^s$ and local right hand side $b^s$\;
+	Calculate local FEM-matrix $\hat A^s$ and local right hand side $\hat b^s$\;
 	
   { Produce the entire vector $b$, same method as described in Alg~\ref{alg:mv_fem} }
 	\nlset{(4)}
-	Communicate entries of $b^s$ to processor sets, see superstep $(1)$ in Alg~\ref{alg:mv_fem}\;
+	Communicate entries of $\hat b^s$ to processor sets, see superstep $(1)$ in Alg~\ref{alg:mv_fem}\;
 	\nlset{(5)}
 	Sum the values to find $b$, see superstep $(2)$ in Alg~\ref{alg:mv_fem}\;
  \caption{Algorithm that calculates the local FEM data.}
  \label{alg:init_fem}
 \end{algorithm}
 
-Note that the CG algorithm also requires us to calculate the inner product. 
+\subsection{Inner product}
+The CG Algorithm also requires the inner product between two vectors. We calculate this inner product using a slightly altered version Algorithm~\ref{alg:ip}, described in the previous work. In the new case, the vector elements are duplicated on every processor in the corresponding processor set. Therefore, for each vector element we must make a choice which processor from the processor set adds the contributions of this element to the inner product. We define this choice by the creating an operator that gives an `owner' of each vector element:
+\[
+	\Pi_{\text{owner}}(i) \in \Pi(i).
+\]
+
+In our implementation we choice to make the processor with the lowest number the owner. The parallel inner product algorithm for these distributions is now given in Algorithm~\ref{alg:fem_ip}.
+
+
 \begin{algorithm}[H]
 \SetKw{KwStep}{step}
 \SetKwInOut{Input}{Input}  
@@ -481,20 +500,20 @@ Note that the CG algorithm also requires us to calculate the inner product.
 		$a := a + a_t$\;
 	}
  \caption{Inner product for vectors in FEM-system for $P(s)$}
- \label{alg:ip_fem}
+ \label{alg:fem_ip}
 \end{algorithm}
-\subsection{Finding a processor distribution}
-Given a vertex $x_i$, there are two possibilities:
+
+\subsection{CG on FEM-system}
+In the previous sections we have given a way to calculate the matrix-vector and inner product for a FEM system, defined by a mesh and a triangle distribution. (Opposed to an actual distribution of the stiffness matrix elements, which we used in Section [x]).
+
+With both these operators the implementation of CG is similar to the sequential one described in Algorithm~\ref{alg:cg}, we just have to replace the inner product and matrix-vector product with the algorithms described above.
+\subsection{Triangle distribution}
+The triangle distribution $\psi$ determines the cost of the operations described above. For a vertex $x_i$, there are two possibilities:
 \begin{enumerate}
   \item $|\Pi(i)| = 1$. This means that all interactions of the basis function $\phi_i$ are stored on a single processor $q$, meaning that $(Au)_i = (A^qu)_i$ or in other words, no communication is necessary. This corresponds with $x_0$ in Figure~\ref{fig:procset};
   \item $|\Pi(i)| > 1$. Interactions of $\phi_i$ are stored on different processors. To compute $(Au)_i$, we need to communicate with $|\Pi(i)|-1$ processors. This corresponds with vertices $x_1, x_2$ in Figure~\ref{fig:procset}.
 \end{enumerate}
 
-\begin{figure}
-  \includegraphics[width=0.5\linewidth]{procset.png}
-  \caption{A sample mesh with its processor distribution. Only vertices not on the boundary have been numbered. For these vertices, $\Pi(0) = \{0, 1, 2, 3\}, \Pi(1) = \{0\}, \Pi(2) = \{0, 1\}$.}
-  \label{fig:procset}
-\end{figure}
 
 Here we see the second advantage of this approach. By distributing triangles, we can balance computation and communication cost of a matrix-vector multiplication. We chose to use Mondriaan, using \cite{bissmondriaan,biss2012}. First, we create some triangulation (e.g., using \cite{TODOJAN}) and save this to disk for later retrieval. We then transform this into a \emph{hypergraph} $H = (V,E)$ -- a generalization of a graph in which any number of hypervertices can be connected by hyperedges or \emph{nets}. This is done as follows:
 \begin{itemize}
