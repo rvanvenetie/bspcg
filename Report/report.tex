@@ -582,6 +582,10 @@ The main difference is the fact that $t_{mv}$ is a factor 4 faster in the new ca
 \end{figure}
 
 \section{Conclusion}
+In this report we have developed two parallel CG algorithms for solving $Ax =b$, with $A$ a sspd matrix. The first algorithm works by defining a distribution for the non-zeros of $A$. We then use \verb=bspmv= and a slightly altered version of \verb=bspip= to create a parallel CG implementation. This version distributes the elements $A_{ij}$ and therefore works for any sspd matrix.
+
+We have tested this method with random generated matrices. 
+In this project we have given two parallel cg al
 FEM systemen zijn veel beter om mee te testen dan random matrices
 
 \section{Discussion}
