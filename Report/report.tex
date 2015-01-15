@@ -1,12 +1,10 @@
 \documentclass[11pt]{amsart}
 
 \usepackage{geometry}
-\usepackage{showlabels}
 \usepackage{caption}
 \usepackage{multirow}
 \usepackage{hyperref}
 \usepackage{algpseudocode}
-\usepackage{todonotes}
 \usepackage[noline,ruled]{algorithm2e}
 \usepackage{enumerate}
 \usepackage{graphicx}
@@ -89,7 +87,7 @@
 In this report, we will be concerned with solving $Ax=b$ for \emph{sspd} (sparse symmetric positive-definite) $A$, with known $A$ and $b$. We will use the Conjugate Gradient method as iterative solver. More specifically, we will be interested in parallelizing this method. 
 In \S2--\S5, we will give our solution to Exercise~4.6 from \cite{biss04} by specifying a general-purpose parallel sparse CG implementation. We will test our implementation using random generated matrices.
 
-In \S6 we will narrow our class of sspd matrices to matrices found in the Finite Element Method. These matrices have additional (geometrical) structure as they arise from solving a partial differential equation.  We will use this knowledge to create another parallel CG implementation specifically for FEM-matrices. These matrices occur reguarly in engineering and thus even have a practical use.
+In \S6 we will narrow our class of sspd matrices to matrices found in the (continuous piecewise linear) Finite Element Method. These matrices have additional (geometrical) structure as they arise from solving a partial differential equation.  We will use this knowledge to create another parallel CG implementation specifically for FEM-matrices. These matrices occur reguarly in engineering and thus even have a practical use.
 
 In \S7 we will test both our methods on a set of FEM-matrices. What method performs better? When does the CG method benefit from parallelizing, and how large does our system need to be?
 
@@ -158,7 +156,7 @@ The resulting parallel algorithm is in appearance almost exactly as Algorithm~\r
 		$\alpha := 0$\;
 		\tcc{Compute local inner product}
 		\For{$i = 0$ to $nv_s$} {
-			$\alpha \gets \alpha + v_s[i] \cdot y_s[i]$
+			$\alpha = \alpha + v_s[i] \cdot y_s[i]$
 		}
 		\tcc{Put local inner prodcut}
 		\For{$q = 0$ to $p$} {
@@ -166,7 +164,7 @@ The resulting parallel algorithm is in appearance almost exactly as Algorithm~\r
 		}
 		\tcc{Find global inner product}
 		\For{$q = 0$ to $p$} {
-			$\alpha \gets \alpha + \alpha_q$\;
+			$\alpha = \alpha + \alpha_q$\;
 		}
 \end{algorithm}
 
@@ -587,7 +585,7 @@ We wanted to work on FEM-matrices, as we have both done something with FEM in th
 \section{Future work}
 During the project we came up with a lot of interesting stuff we could have figured out. Here we have a summary of things we could improve our work with.
 \subsection{Inner product}
-For large systems we saw that the time spent in matrix-vector products reduces when using more processors, whilst the time spent in the inner product actually increases. We want to figure out if we could possibly improve the time of the inner product. An example would be demanding other properties from the triangle distribution. Another idea is to use one or two passes from the method proposed in the first Homework exercise before switching to the old method.
+For large systems we saw that the time spent in matrix-vector products reduces when using more processors, whilst the time spent in the inner product actually increases. We want to figure out if we could possibly improve the time of the inner product. An example would be demanding other properties from the triangle distribution. Another idea is to combine ideas from the method proposed in \cite[Ex~1.1]{biss04} with the old method.
 \subsection{Preconditioned CG}
 The iterates $x_k$ obtained from the CG algorithm satisfy the following inequality \cite[Lect.~7]{sleij}:
 \[
