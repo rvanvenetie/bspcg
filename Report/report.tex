@@ -84,7 +84,12 @@
 ``The finite element method (FEM) is a numerical technique for finding approximate solutions to boundary value problems for partial differential equations. It uses subdivision of a whole problem domain into simpler parts, called finite elements, and variational methods from the calculus of variations to solve the problem by minimizing an associated error function. Analogous to the idea that connecting many tiny straight lines can approximate a larger circle, FEM encompasses methods for connecting many simple element equations over many small subdomains, named finite elements, to approximate a more complex equation over a larger domain." \cite{wiki:fem}
 \end{quote}
 
-iets over waarom fem matrices
+In this report, we will be concerned with solving $Ax=b$ for \emph{sspd} (sparse symmetric positive-definite) $A$, with known $A$ and $b$. We will use the Conjugate Gradient method as iterative solver. More specifically, we will be interested in parallelizing this method. 
+First, we will give our solution to Exercise~4.6 from \cite{biss04} by specifying a general-purpose parallel sparse CG implementation. We will test our implementation using random generated matrices.
+
+In the second part we will narrow our class of sspd matrices to Finite Element matrices. These matrices have additional (geometrical) structure as they arise from solving a partial differential equation.  We will use this knowledge to create another paralel CG implementation specifically for FEM-matrices. These matrices occur reguarly in engineering and thus even have a practical use.
+
+We will test both our methods on a set of FEM-matrices. What method performs better? When does the CG method benefit from parallelizing, how large does our system need to be?
 
 \section{CG}
 In its most basic (sequential, non-preconditioned) form, CG can be written down as in Algorithm~\ref{alg:seqcg}. \cite[Alg.~4.8]{biss04} We slightly adapted it from its original form to be able to use the different BLAS \cite{blas} routines.
@@ -359,7 +364,7 @@ To implement CG with our new distribution we need to calculate the matrix-vector
 \]
 The matrices $A^q$ are $D \times D$ but again very sparse. We identify $A^q$ with a smaller matrix $\hat A^q$ by removing zero rows and columns. As the name suggest, the processor $q$ constructs the matrix $A^q$ (actually $\hat A^q$) locally. This is possible because $A^q$ only depends on triangles that are distributed to processor $q$.
 
-To calculate the entire product $v = Au$, we will first calculate $v^q = A^q u$ (actually $\hat v^q = \hat A^q \hat u$). We can find $v$ by adding these local vectors: $v = \sum_{q =0}^{p-1} v^q$. Remember that vector element $v_i$ corresponds to a vertex $x_i$, which is shared by the processors in the set $\Pi(i)$. We calculate the value $v_i$ by letting every processor in the set $\Pi(i)$ send $(v^q)_i$ to every other processor in $\Pi(i)$. After this communication step, every processor sums over these local values to find $v_i$. This method ensures that every processor sharing vertex $x_i$ gets the correct value of $v_i$. In Algorithm~\ref{alg:fem_mv} we give the implementation of the parallel $v = Au$ for a FEM-matrix $A$.
+To calculate the entire product $u = Av$, we will first calculate $v^q = A^q u$ (actually $\hat v^q = \hat A^q \hat u$). We can find $v$ by adding these local vectors: $v = \sum_{q =0}^{p-1} v^q$. Remember that vector element $v_i$ corresponds to a vertex $x_i$, which is shared by the processors in the set $\Pi(i)$. We calculate the value $v_i$ by letting every processor in the set $\Pi(i)$ send $(v^q)_i$ to every other processor in $\Pi(i)$. After this communication step, every processor sums over these local values to find $v_i$. This method ensures that every processor sharing vertex $x_i$ gets the correct value of $v_i$. In Algorithm~\ref{alg:fem_mv} we give the implementation of the parallel $u = Av$ for a FEM-matrix $A$.
 
 \begin{algorithm}[H]
 \SetKw{KwStep}{step}
@@ -475,8 +480,8 @@ With both these operators the implementation of CG is similar to the sequential 
 \subsection{Triangle distribution}
 The triangle distribution $\psi$ determines the cost of the operations described above. For a vertex $x_i$, there are two possibilities:
 \begin{enumerate}
-  \item $|\Pi(i)| = 1$. This means that all interactions of the basis function $\phi_i$ are stored on a single processor $q$, meaning that $(Au)_i = (A^qu)_i$ or in other words, no communication is necessary. This corresponds with $x_0$ in Figure~\ref{fig:procset};
-  \item $|\Pi(i)| > 1$. Interactions of $\phi_i$ are stored on different processors. To compute $(Au)_i$, we need to communicate with $|\Pi(i)|-1$ processors. This corresponds with vertices $x_1, x_2$ in Figure~\ref{fig:procset}.
+  \item $|\Pi(i)| = 1$. This means that all interactions of the basis function $\phi_i$ are stored on a single processor $q$, meaning that $(Av)_i = (A^qv)_i$ or in other words, no communication is necessary. This corresponds with $x_0$ in Figure~\ref{fig:procset};
+  \item $|\Pi(i)| > 1$. Interactions of $\phi_i$ are stored on different processors. To compute $(Av)_i$, we need to communicate with $|\Pi(i)|-1$ processors. This corresponds with vertices $x_1, x_2$ in Figure~\ref{fig:procset}.
 \end{enumerate}
 
 Here we see another advantage of our FEM-approach. By distributing triangles, we can balance computation and communication cost of a matrix-vector multiplication. We chose to use Mondriaan, using \cite{bissmondriaan,biss2012}. We transform a given triangulation into a \emph{hypergraph} $H = (V,E)$ -- a generalization of a graph in which any number of hypervertices can be connected by hyperedges or \emph{nets}. This is done as follows:
